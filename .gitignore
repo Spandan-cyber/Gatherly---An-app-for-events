@@ -46,7 +46,6 @@ mailtest
 resend_passes.py
 
 # Database implementation
-database.py
 
 # Other test files
 test_*.py
