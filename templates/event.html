@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090b12">
+    <title>Event experience — Gatherly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body data-event-id="{{ event_id }}" data-is-signed-in="{{ 'true' if user_id else 'false' }}">
+    {% with active_nav='discover', login_next='/events/' ~ event_id %}{% include '_navbar.html' %}{% endwith %}
+    <main class="booking-page">
+        <a class="back-link" href="/">← Back to discover</a>
+        <div id="bookingPageContent" class="booking-page-content" aria-live="polite">
+            <div class="booking-loading">Gathering the details…</div>
+        </div>
+    </main>
+    <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/booking.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090b12">
+    <title>{% if gate_type == 'MOVIE' %}Theatre movie gate{% else %}Event gate{% endif %} — Gatherly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="gate-page" data-gate-authenticated="{{ 'true' if gate else 'false' }}" data-gate-id="{{ gate['id'] if gate else '' }}" data-gate-type="{{ gate_type or 'EVENT' }}">
+    {% with active_nav='gate', gate_mode=true %}{% include '_navbar.html' %}{% endwith %}
+    <main class="gate-main">
+        <section id="gateLoginPanel" class="gate-login-card{% if gate %} hidden{% endif %}">
+            <span class="section-kicker">GATHERLY GATE ACCESS</span>
+            <h1>Gatherly gate scanner</h1>
+            <p>Sign in with the gate credentials supplied by your event host or verified theatre.</p>
+            <form id="gateLoginForm">
+                <label for="gateUsername">Gate username</label>
+                <input id="gateUsername" name="username" type="text" autocomplete="username" maxlength="64" required>
+                <label for="gatePassword">Gate password</label>
+                <input id="gatePassword" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+                <button class="btn-primary gate-primary-action" type="submit">SIGN IN TO SCANNER</button>
+            </form>
+            <p id="gateLoginFeedback" class="gate-feedback" role="status" aria-live="polite"></p>
+        </section>
+        <section id="gateScannerPanel" class="gate-scanner-card{% if not gate %} hidden{% endif %}">
+            <span class="section-kicker" id="gateScopeLabel">{% if gate_type == 'MOVIE' %}THEATRE MOVIE SCANNER{% else %}EVENT-SCOPED SCANNER{% endif %}</span>
+            <h1 id="gateEventTitle">{{ gate['title'] if gate else 'Gate scanner' }}</h1>
+            <p id="gateEventDetails" class="gate-event-details">
+                {% if gate %}<span data-gatherly-date="{{ gate['event_date'] }}" data-gatherly-time="{{ gate['event_time'] }}"></span><br>{{ gate['venue'] }}, {{ gate['city'] }}{% endif %}
+            </p>
+            <p id="gateScopeNote" class="gate-scope-note">{% if gate_type == 'MOVIE' %}This theatre gate can validate movie tickets for screenings at this theatre.{% else %}This account can validate passes for this event only.{% endif %}</p>
+            <div class="gate-scan-controls">
+                <video id="gateVideo" class="gate-video hidden" autoplay playsinline muted aria-label="Camera QR scanner"></video>
+                <button id="gateCameraButton" class="btn-primary gate-primary-action" type="button">START CAMERA SCANNER</button>
+                <form id="gateManualForm" class="gate-manual-form">
+                    <label for="gateQrInput">Camera unavailable? Enter QR content privately</label>
+                    <div class="gate-manual-row">
+                        <input id="gateQrInput" type="password" autocomplete="off" spellcheck="false" aria-describedby="gateQrPrivacy" required>
+                        <button class="btn-primary btn-logout" type="submit">VERIFY</button>
+                    </div>
+                    <small id="gateQrPrivacy">The scanned content is validated securely and never shown in the result.</small>
+                </form>
+            </div>
+            <div id="gateScanResult" class="gate-scan-result hidden" role="status" aria-live="polite"></div>
+            <p id="gateScannerFeedback" class="gate-feedback" role="status" aria-live="polite"></p>
+        </section>
+    </main>
+    <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/vendor/jsQR.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/gate.js') }}"></script>
+</body>
+</html>

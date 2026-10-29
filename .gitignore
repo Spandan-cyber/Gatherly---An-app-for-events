@@ -1,0 +1,83 @@
+# ==========================================
+# GATHERLY - Git Ignore Configuration
+# ==========================================
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# User uploads and generated media
+uploads/
+static/uploads/
+
+# ==========================================
+# Private scripts and test files
+# ==========================================
+
+# Supabase migration and synchronization scripts
+migrate_to_supabase.py
+sync_media_to_supabase_storage.py
+test_supabase.py
+
+# Email testing and resend utilities
+mailtest.py
+mailtest
+resend_passes.py
+
+# Database implementation
+database.py
+
+# Other test files
+test_*.py
+*_test.py
+tests/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build and distribution files
+build/
+dist/
+*.egg-info/
+
+# Coverage and test reports
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

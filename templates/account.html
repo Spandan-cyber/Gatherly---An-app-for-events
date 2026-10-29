@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090b12">
+    <title>My account — Gatherly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="account-page" data-is-signed-in="true">
+    {% with active_nav='account' %}{% include '_navbar.html' %}{% endwith %}
+
+    <main class="account-main">
+        <section class="account-hero">
+            <span class="section-kicker">YOUR GATHERLY</span>
+            <h1>My account</h1>
+            <p>Your profile, event history, and account security in one place.</p>
+        </section>
+
+        <div id="accountNotice" class="account-notice hidden" role="status" aria-live="polite"></div>
+
+        <section class="account-panel account-profile-panel">
+            <div class="account-panel-heading">
+                <div><span class="section-kicker">PERSONAL DETAILS</span><h2>Your profile</h2></div>
+            </div>
+            <form id="accountProfileForm" class="account-profile-form">
+                <label>Full name<input id="accountName" name="full_name" maxlength="120" required></label>
+                <label>Email address<input id="accountEmail" type="email" readonly aria-describedby="accountEmailHelp"></label>
+                <small id="accountEmailHelp">Your sign-in email is verified and cannot be changed here.</small>
+                <label>City<input id="accountCity" name="city" maxlength="100"></label>
+                <button class="btn-primary" type="submit">SAVE PROFILE</button>
+            </form>
+        </section>
+
+        <section class="account-panel">
+            <div class="account-panel-heading">
+                <div><span class="section-kicker">ORGANIZATION PROFILE</span><h2>Verification & badges</h2></div>
+            </div>
+            <p id="accountRoleStatus" class="account-muted">Loading your organization status…</p>
+            <form id="organizationVerificationForm" class="account-profile-form">
+                <label>Request type
+                    <select id="organizationAccountType" required>
+                        <option value="THEATRE">Theatre / cinema</option>
+                        <option value="ORGANIZER">Event organizer</option>
+                    </select>
+                </label>
+                <label>Organization name<input id="organizationName" maxlength="160" required></label>
+                <p class="account-muted">Verification requests require a matching @gatherly.theatre / @gatherly.movies or @gatherly.organizer email address.</p>
+                <button class="btn-primary" type="submit">REQUEST VERIFICATION</button>
+            </form>
+        </section>
+
+        <section class="account-panel">
+            <div class="account-panel-heading">
+                <div><span class="section-kicker">YOUR GATHERLY STORY</span><h2>Previous activity</h2></div>
+            </div>
+            <div class="account-tabs" role="tablist" aria-label="Activity categories">
+                <button class="account-tab active" type="button" data-activity-tab="bookings" role="tab" aria-selected="true">Bookings</button>
+                <button class="account-tab" type="button" data-activity-tab="movie_passes" role="tab" aria-selected="false">Movie passes</button>
+                <button class="account-tab" type="button" data-activity-tab="hosted_events" role="tab" aria-selected="false">Events hosted</button>
+                <button class="account-tab" type="button" data-activity-tab="invitations" role="tab" aria-selected="false">Invitations</button>
+                <button class="account-tab" type="button" data-activity-tab="waitlist" role="tab" aria-selected="false">Waitlist</button>
+            </div>
+            <div id="accountActivity" class="account-activity-list" aria-live="polite">
+                <p class="empty-state">Loading your activity…</p>
+            </div>
+        </section>
+
+        <section class="account-panel">
+            <div class="account-panel-heading">
+                <div><span class="section-kicker">PASSWORD</span><h2>Recover or change password</h2></div>
+            </div>
+            <p class="account-muted">We’ll send a one-time code to your verified email before allowing a password change.</p>
+            <form id="accountPasswordForm" class="account-security-form">
+                <button id="accountPasswordRequest" class="btn-primary btn-logout" type="button">EMAIL ME A PASSWORD CODE</button>
+                <div id="accountPasswordFields" class="account-password-fields hidden">
+                    <label>6-digit email code<input id="accountPasswordOtp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+                    <label>New password<input id="accountNewPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+                    <button class="btn-primary" type="submit">UPDATE PASSWORD</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="account-panel account-danger-panel">
+            <div class="account-panel-heading">
+                <div><span class="section-kicker">DANGER ZONE</span><h2>Delete your account</h2></div>
+            </div>
+            <p class="account-muted">We’ll verify the request by email, remove your profile details, and sign you out. Confirmed bookings, valid admission passes, and event records needed to operate events are retained without your personal identity; any unpaid bookings are cancelled.</p>
+            <button id="accountDeleteRequest" class="btn-primary account-danger-button" type="button">REQUEST ACCOUNT DELETION</button>
+            <form id="accountDeleteForm" class="account-security-form hidden">
+                <label>6-digit email code<input id="accountDeleteOtp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+                <label class="account-confirm-label"><input id="accountDeleteConfirm" type="checkbox" required> I understand this removes my personal account details and cannot be undone.</label>
+                <button class="btn-primary account-danger-button" type="submit">VERIFY CODE &amp; DELETE ACCOUNT</button>
+            </form>
+        </section>
+    </main>
+    <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/account.js') }}"></script>
+</body>
+</html>

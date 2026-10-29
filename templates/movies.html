@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090b12">
+    <title>Movies & Seats — Gatherly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/movies.css') }}">
+</head>
+<body class="movies-page" data-is-signed-in="{{ 'true' if user_id else 'false' }}" data-open-tickets="{{ 'true' if show_tickets else 'false' }}">
+    {% with active_nav='movies' if not show_tickets else 'movie-tickets' %}{% include '_navbar.html' %}{% endwith %}
+    <main class="movies-main">
+        <section class="movies-hero">
+            <span class="section-kicker">THE BIG SCREEN, YOUR WAY</span>
+            <h1>Pick your movie.<br><span>Own your seat.</span></h1>
+            <p>Browse upcoming screenings, compare seat tiers and choose the exact seats together.</p>
+        </section>
+        <div id="moviesNotice" class="movie-notice hidden" role="status" aria-live="polite"></div>
+        {% if show_tickets %}
+        <section class="movie-tickets-page-section">
+            <div class="movie-section-heading">
+                <div><span class="section-kicker">YOUR GATHERLY MOVIE PASSES</span><h2>Movie tickets</h2></div>
+            </div>
+            <p class="movie-seat-help">Confirmed movie QR tickets are stored here and sent to your email. Event passes remain in the main Gatherly site.</p>
+            <div id="movieTicketPageList" class="movie-reservation-list" aria-live="polite">
+                <p class="empty-state">Loading your movie tickets…</p>
+            </div>
+        </section>
+        {% else %}
+        <section>
+            <div class="movie-section-heading"><div><span class="section-kicker">NOW SHOWING</span><h2>Upcoming screenings</h2></div></div>
+            <div id="movieShowtimes" class="movie-showtime-grid" aria-live="polite">
+                <p class="empty-state">Finding screenings…</p>
+            </div>
+        </section>
+        {% endif %}
+    </main>
+    {% if not show_tickets %}
+    <div id="seatPicker" class="movie-overlay hidden" aria-hidden="true">
+        <section class="movie-seat-dialog" role="dialog" aria-modal="true" aria-label="Choose movie seats">
+            <button id="closeSeatPicker" class="close-modal-btn" type="button" aria-label="Close seat picker">✕</button>
+            <div id="seatPickerContent"></div>
+        </section>
+    </div>
+    {% endif %}
+    {% if not show_tickets %}
+    <div id="movieTickets" class="movie-overlay hidden" aria-hidden="true">
+        <section class="movie-seat-dialog movie-tickets-dialog" role="dialog" aria-modal="true" aria-labelledby="movieTicketsTitle">
+            <button id="closeMovieTickets" class="close-modal-btn" type="button" aria-label="Close movie tickets">✕</button>
+            <span class="section-kicker">YOUR BOOKINGS</span>
+            <h2 id="movieTicketsTitle">Movie tickets</h2>
+            <div id="movieReservationList" class="movie-reservation-list" aria-live="polite"></div>
+        </section>
+    </div>
+    {% endif %}
+    <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/movies.js') }}"></script>
+</body>
+</html>

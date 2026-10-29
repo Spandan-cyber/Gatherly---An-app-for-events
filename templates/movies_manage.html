@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090b12">
+    <title>Theatre manager — Gatherly Movies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/movies.css') }}">
+</head>
+<body class="movies-page cinema-manage-page">
+    {% with active_nav='theatre' %}{% include '_navbar.html' %}{% endwith %}
+    <main class="movies-main cinema-manager-main">
+        <section class="movies-hero movie-manager-hero">
+            <span class="section-kicker">THEATRE STUDIO</span>
+            <h1>Build your<br><span>seat map.</span></h1>
+            <p>Upload a seat CSV or edit it here, set tier colors and prices, then publish a screening.</p>
+        </section>
+        <div id="cinemaManagerNotice" class="movie-notice hidden" role="status" aria-live="polite"></div>
+        <section class="cinema-manager-layout">
+            <form id="showtimeForm" class="cinema-form">
+                <h2>Create a screening</h2>
+                <div class="cinema-form-grid">
+                    <label>Movie title<input name="film_title" maxlength="160" required></label>
+                    <label>Language<input name="language" maxlength="80" placeholder="English, Hindi…"></label>
+                    <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="600" required></label>
+                    <label>Starts at<input name="starts_at" type="datetime-local" required></label>
+                    <label>Theatre name<input name="theatre_name" maxlength="120" required></label>
+                    <label>Screen / auditorium<input name="screen_name" maxlength="80" required></label>
+                    <label>City<input name="city" maxlength="100" required></label>
+                    <label class="cinema-wide">Poster (JPG, PNG, WEBP)<input name="poster" type="file" accept="image/jpeg,image/png,image/webp"></label>
+                    <label class="cinema-wide">Short description<textarea name="synopsis" rows="3" maxlength="3000"></textarea></label>
+                </div>
+                <div class="cinema-subsection">
+                    <div class="cinema-subsection-heading"><div><span class="section-kicker">TIER PRICING</span><h3>Name, color & price</h3></div><button id="addCinemaTier" class="btn-primary btn-logout" type="button">ADD TIER</button></div>
+                    <div id="cinemaTierRows" class="cinema-tier-rows"></div>
+                </div>
+                <div class="cinema-subsection">
+                    <div class="cinema-subsection-heading"><div><span class="section-kicker">SEATING MESH</span><h3>Seat layout CSV</h3></div><label class="cinema-upload-label">Upload CSV<input id="seatLayoutFile" type="file" accept=".csv,text/csv"></label></div>
+                    <p class="cinema-help">Columns: <code>row,seat,tier</code>. Add one seat per line. Tier must match a code above. Rows may skip seats to represent aisles.</p>
+                    <textarea id="seatLayoutCsv" rows="7" spellcheck="false" aria-label="Seat layout CSV">row,seat,tier
+A,1,STANDARD
+A,2,STANDARD
+A,3,STANDARD
+B,1,STANDARD
+B,2,STANDARD
+B,3,STANDARD</textarea>
+                    <div class="cinema-preview-wrap"><div class="cinema-screen">SCREEN</div><div id="seatLayoutPreview" class="cinema-seat-preview" aria-live="polite"></div></div>
+                </div>
+                <div class="cinema-form-actions">
+                    <button id="createShowtime" class="btn-primary cinema-submit" type="submit">PUBLISH SCREENING</button>
+                    <button id="cancelShowtimeEdit" class="btn-primary btn-logout cinema-submit hidden" type="button">CANCEL EDIT</button>
+                </div>
+                <p class="cinema-payment-note">Paid seats use the current manual confirmation flow: customers contact the theatre for payment instructions and you confirm receipt here. Online checkout is not active yet; a gateway adapter can be connected without changing the seat map.</p>
+            </form>
+            <aside class="cinema-manager-side">
+                <section class="cinema-manager-card"><span class="section-kicker">PERFORMANCE</span><h2>Movie analytics</h2><div id="cinemaAnalytics" class="cinema-analytics-grid" aria-live="polite"></div></section>
+                <section class="cinema-manager-card">
+                    <span class="section-kicker">THEATRE-WIDE ACCESS</span>
+                    <h2>Movie gate accounts</h2>
+                    <p class="cinema-help">Create one scanner login per theatre gate. Each login works across all your screenings; revoke access immediately when needed.</p>
+                    <form id="cinemaGateForm" class="cinema-gate-form">
+                        <label>Gate name<input name="display_name" maxlength="80" placeholder="North entrance" required></label>
+                        <button class="btn-primary" type="submit">CREATE MOVIE GATE</button>
+                    </form>
+                    <div id="cinemaGateAccounts" class="cinema-manager-list" aria-live="polite"></div>
+                </section>
+                <section class="cinema-manager-card"><span class="section-kicker">YOUR SCREENINGS</span><h2>Live & upcoming</h2><div id="managerShowtimes" class="cinema-manager-list"></div></section>
+                <section class="cinema-manager-card"><span class="section-kicker">PAYMENT REVIEW</span><h2>Pending reservations</h2><div id="managerReservations" class="cinema-manager-list"></div></section>
+            </aside>
+        </section>
+    </main>
+    <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/movies-manage.js') }}"></script>
+</body>
+</html>

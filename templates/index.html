@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GATHERLY — Experience & Tickets</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body data-invitation-token="{{ invitation_token or '' }}" data-is-signed-in="{{ 'true' if user_name else 'false' }}">
+
+    {% with active_nav='discover', show_location=true, show_home_actions=true %}{% include '_navbar.html' %}{% endwith %}
+
+    <!-- Main View -->
+    <main>
+        <section class="hero">
+            <div class="hero-badge" data-typewriter>YOUR CITY. YOUR PEOPLE. YOUR NEXT STORY.</div>
+            <h1 class="hero-title">MAKE IT<br>AN EXPERIENCE<span class="cursor">_</span></h1>
+            <p class="hero-subtitle" data-typewriter>Find the shows worth leaving home for. Explore the lineup, the people and the place before you book.</p>
+            <a class="hero-cta" href="#events">Explore experiences <span aria-hidden="true">↘</span></a>
+        </section>
+
+        <!-- Events List -->
+        <section id="events" class="events-section">
+            <div class="section-header">
+                <h2>NEARBY EXPERIENCES</h2>
+                <div class="event-toolbar">
+                <div class="event-filters" aria-label="Filter and sort events">
+                    <select id="eventCategoryFilter" aria-label="Filter by category">
+                        <option value="">All categories</option>
+                        <option value="Concert">Concert</option>
+                        <option value="Comedy">Comedy</option>
+                        <option value="Festival">Festival</option>
+                        <option value="Meetup">Meetup</option>
+                    </select>
+                    <select id="eventPriceFilter" aria-label="Filter by price">
+                        <option value="">All prices</option>
+                        <option value="free">Free</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                    <select id="eventSort" aria-label="Sort events">
+                        <option value="recommended">Recommended</option>
+                        <option value="date">Soonest</option>
+                        <option value="price-low">Price: low to high</option>
+                        <option value="price-high">Price: high to low</option>
+                        <option value="name">Name: A to Z</option>
+                        <option value="city">City</option>
+                    </select>
+                    <div class="event-view-toggle" role="group" aria-label="Event display">
+                        <button id="showEventCards" class="event-view-button active" type="button" aria-pressed="true">LIST</button>
+                        <button id="showEventCalendar" class="event-view-button" type="button" aria-pressed="false">CALENDAR</button>
+                    </div>
+                </div>
+                </div>
+            </div>
+            <section id="eventCalendar" class="event-calendar hidden" aria-label="Events calendar">
+                <div class="calendar-heading">
+                    <button id="calendarPrevious" class="calendar-nav-button" type="button" aria-label="Previous month">←</button>
+                    <h3 id="calendarMonthLabel"></h3>
+                    <button id="calendarNext" class="calendar-nav-button" type="button" aria-label="Next month">→</button>
+                </div>
+                <div class="calendar-grid" id="calendarGrid"></div>
+            </section>
+            <div id="eventGrid" class="event-cards-grid">
+                <!-- Dynamically Rendered -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Auth Floating Modal -->
+    <div id="authModalOverlay" class="modal-overlay hidden">
+        <div class="glass-modal">
+            <button class="close-modal-btn" onclick="closeAuthModal()">✕</button>
+
+            <!-- Login View -->
+            <div id="viewLogin" class="auth-view">
+                <h2 class="modal-title">ACCESS.</h2>
+                <form onsubmit="handleLogin(event)">
+                    <div class="input-group">
+                        <label>EMAIL</label>
+                        <input type="email" id="loginEmail" required>
+                    </div>
+                    <div class="input-group">
+                        <label>PASSWORD</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <button type="submit" class="btn-submit">LOGIN</button>
+                </form>
+                <div class="modal-footer-toggle">
+                    <a href="javascript:void(0)" onclick="switchAuthView('reset')">Forgot Password?</a> | 
+                    <a href="javascript:void(0)" onclick="switchAuthView('signup')">Create Account</a>
+                </div>
+            </div>
+
+            <!-- Signup View -->
+            <div id="viewSignup" class="auth-view hidden">
+                <h2 class="modal-title">CREATE.</h2>
+                <form onsubmit="handleSignup(event)">
+                    <div class="input-group">
+                        <label>FULL NAME</label>
+                        <input type="text" id="signupName" required>
+                    </div>
+                    <div class="input-group">
+                        <label>EMAIL</label>
+                        <input type="email" id="signupEmail" required>
+                    </div>
+                    <div class="input-group">
+                        <label>PASSWORD</label>
+                        <input type="password" id="signupPassword" minlength="8" autocomplete="new-password" required>
+                    </div>
+                    <button type="submit" class="btn-submit">SIGN UP</button>
+                </form>
+                <div class="modal-footer-toggle">
+                    <a href="javascript:void(0)" onclick="switchAuthView('login')">Back to Login</a>
+                </div>
+            </div>
+
+            <!-- Password Reset View -->
+            <div id="viewReset" class="auth-view hidden">
+                <h2 class="modal-title">RESET PASSWORD.</h2>
+                <p class="auth-helper">Forgot your password? Verify a one-time email code, then set a new password.</p>
+                <form id="resetRequestForm" onsubmit="handleRequestReset(event)">
+                    <div class="input-group">
+                        <label>REGISTERED EMAIL</label>
+                        <input type="email" id="resetEmail" required>
+                    </div>
+                    <button type="submit" class="btn-submit">SEND CODE</button>
+                </form>
+
+                <form id="resetConfirmForm" class="hidden" onsubmit="handleConfirmReset(event)">
+                    <div class="input-group">
+                        <label>6-DIGIT CODE</label>
+                        <input type="text" id="resetOtp" maxlength="6" required>
+                    </div>
+                    <div class="input-group">
+                        <label>NEW PASSWORD</label>
+                        <input type="password" id="resetNewPassword" minlength="8" autocomplete="new-password" required>
+                    </div>
+                    <button type="submit" class="btn-submit">UPDATE PASSWORD</button>
+                </form>
+                <div class="modal-footer-toggle">
+                    <a href="javascript:void(0)" onclick="switchAuthView('login')">Back to Login</a>
+                </div>
+            </div>
+
+            <div id="viewVerify" class="auth-view hidden">
+                <h2 class="modal-title">CHECK YOUR INBOX.</h2>
+                <p class="auth-helper">We sent a 6-digit sign-up verification code to <strong id="verifyEmailLabel"></strong>. It expires in 10 minutes.</p>
+                <form onsubmit="handleVerifyOtp(event)">
+                    <div class="input-group">
+                        <label>VERIFICATION CODE</label>
+                        <input type="text" id="authOtp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+                    </div>
+                    <button type="submit" class="btn-submit">VERIFY &amp; CONTINUE</button>
+                </form>
+                <div class="modal-footer-toggle">
+                    <a href="javascript:void(0)" onclick="switchAuthView('login')">Back to Login</a>
+                </div>
+            </div>
+
+            <div id="modalAlert" class="alert-box hidden" role="status" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <!-- Create Event Floating Modal -->
+    <div id="eventModalOverlay" class="modal-overlay hidden">
+        <div class="glass-modal modal-large">
+            <button class="close-modal-btn" onclick="closeCreateEventModal()">✕</button>
+            <h2 class="modal-title">CREATE EVENT.</h2>
+
+            <form onsubmit="handleCreateEvent(event)">
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>EVENT TITLE</label>
+                        <input type="text" id="evTitle" required>
+                    </div>
+                    <div class="input-group">
+                        <label>CATEGORY</label>
+                        <select id="evCategory">
+                            <option value="Concert">Concert</option>
+                            <option value="Comedy">Comedy</option>
+                            <option value="Festival">Festival</option>
+                            <option value="Meetup">Meetup</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>VISIBILITY</label>
+                        <select id="evVisibility">
+                            <option value="PUBLIC">Public</option>
+                            <option value="PRIVATE">Private</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>TYPE</label>
+                        <select id="evIsPaid" onchange="togglePriceInput(this.value)">
+                            <option value="false">Free</option>
+                            <option value="true">Paid</option>
+                        </select>
+                    </div>
+                    <div class="input-group hidden" id="priceGroup">
+                        <label>PRICE (₹)</label>
+                        <input type="number" id="evPrice" min="0" step="0.01" value="0.0">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>DATE</label>
+                        <input type="date" id="evDate" required>
+                    </div>
+                    <div class="input-group">
+                        <label>TIME (IST)</label>
+                        <input type="time" id="evTime" required>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>EVENT CITY</label>
+                    <div class="city-input-row">
+                        <input type="text" id="evCity" maxlength="100" placeholder="e.g. Mumbai" required>
+                        <button type="button" class="btn-primary btn-logout" onclick="copyDetectedCity()">USE DETECTED CITY</button>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>ABOUT THIS EXPERIENCE</label>
+                    <textarea id="evDescription" rows="4" placeholder="Tell guests what makes this event special"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>TICKET CAPACITY</label>
+                        <input type="number" id="evCapacity" min="1" placeholder="Leave empty for unlimited">
+                    </div>
+                    <div class="input-group">
+                        <label>GALLERY PHOTOS</label>
+                        <input type="file" id="evGalleryImages" accept="image/*" multiple>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>TICKET TIERS / SEATING</label>
+                    <div id="eventTierRows"></div>
+                    <button type="button" class="btn-primary btn-logout" id="addEventTier">ADD TIER</button>
+                </div>
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>PUBLISH EVENT AT (OPTIONAL)</label>
+                        <input type="datetime-local" id="evPublishAt">
+                    </div>
+                    <div class="input-group">
+                        <label>START TICKET SALES AT (OPTIONAL)</label>
+                        <input type="datetime-local" id="evSalesStartAt">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>VENUE LOCATION</label>
+                    <input type="text" id="evVenue" placeholder="Venue or Address" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>MAIN IMAGE</label>
+                        <input type="file" id="evMainImg" accept="image/*" required>
+                        <small class="upload-guidance">Recommended: 1200 × 800 px or larger, JPG/WEBP, high quality. Keep the main subject centered for card crops.</small>
+                    </div>
+                    <div class="input-group">
+                        <label>COVER ART</label>
+                        <input type="file" id="evCoverImg" accept="image/*">
+                        <small class="upload-guidance">Recommended: 1920 × 1080 px, JPG/WEBP. Use a wide 16:9 image and keep important text near the center.</small>
+                    </div>
+                    <div class="input-group">
+                        <label>TEASER VIDEO</label>
+                        <input type="file" id="evVideo" accept="video/*">
+                        <small class="upload-guidance">This teaser also plays silently in the event booking-page hero. MP4 (H.264) or WebM at 720p/1080p works best; use a short, compressed montage. Cover art remains as the fallback and poster.</small>
+                    </div>
+                </div>
+
+                <div class="input-group event-partners-input">
+                    <div class="event-partners-heading">
+                        <div>
+                            <label>SPONSORS &amp; EVENT PARTNERS</label>
+                            <small class="upload-guidance">Add up to 12 sponsors or partners. Transparent PNG or SVG-style logo artwork exported as PNG works well; keep each logo readable at small sizes.</small>
+                        </div>
+                        <button type="button" class="btn-primary btn-logout" id="addEventPartner">ADD PARTNER</button>
+                    </div>
+                    <div id="eventPartnerRows"></div>
+                </div>
+
+                <button type="submit" class="btn-submit">LAUNCH EVENT</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="eventDetailsOverlay" class="modal-overlay hidden">
+        <div class="glass-modal modal-large event-details-modal">
+            <button class="close-modal-btn" onclick="closeEventDetails()">✕</button>
+            <div id="eventDetailsContent"></div>
+            <div id="eventBookingReview" class="booking-review hidden"></div>
+        </div>
+    </div>
+
+    <div id="passesOverlay" class="modal-overlay hidden">
+        <div class="glass-modal modal-large">
+            <button class="close-modal-btn" onclick="document.getElementById('passesOverlay').classList.add('hidden')">✕</button>
+            <h2 class="modal-title">MY PASSES</h2>
+            <div id="myPassesList" class="dashboard-list"></div>
+        </div>
+    </div>
+
+    <div id="wishlistOverlay" class="modal-overlay hidden">
+        <div class="glass-modal modal-large">
+            <button class="close-modal-btn" onclick="document.getElementById('wishlistOverlay').classList.add('hidden')">✕</button>
+            <h2 class="modal-title">YOUR WISHLIST</h2>
+            <div id="wishlistEvents" class="dashboard-list"></div>
+        </div>
+    </div>
+
+    <div id="invitationsOverlay" class="modal-overlay hidden">
+        <div class="glass-modal modal-large" role="dialog" aria-modal="true" aria-labelledby="invitationsTitle">
+            <button class="close-modal-btn" type="button" onclick="document.getElementById('invitationsOverlay').classList.add('hidden')">✕</button>
+            <span class="section-kicker">YOUR PEOPLE</span>
+            <h2 class="modal-title" id="invitationsTitle">INVITATIONS</h2>
+            <p class="account-muted">RSVP to events and collaborations shared with you.</p>
+            <div id="receivedInvitations" class="dashboard-list" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <div id="updatesOverlay" class="modal-overlay hidden">
+        <div class="glass-modal modal-large" role="dialog" aria-modal="true" aria-labelledby="updatesTitle">
+            <button class="close-modal-btn" type="button" onclick="closeUpdates()">✕</button>
+            <span class="section-kicker">DIRECT FROM YOUR EVENT HOSTS</span>
+            <h2 class="modal-title" id="updatesTitle">EVENT UPDATES</h2>
+            <p class="account-muted">Private updates for your bookings. Your contact details are never shared with event hosts.</p>
+            <div id="eventUpdates" class="dashboard-list" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <aside class="public-assistant" id="publicAssistant">
+        <section class="public-assistant-panel hidden" id="publicAssistantPanel" role="dialog" aria-labelledby="publicAssistantTitle">
+            <header class="public-assistant-header">
+                <div>
+                    <span class="section-kicker">GATHERLY AI</span>
+                    <h2 id="publicAssistantTitle">How can I help?</h2>
+                </div>
+                <button class="public-assistant-close" id="publicAssistantClose" type="button" aria-label="Close assistant">×</button>
+            </header>
+            <div class="public-assistant-messages" id="publicAssistantMessages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+            <form class="public-assistant-form" id="publicAssistantForm">
+                <label class="sr-only" for="publicAssistantInput">Message the Gatherly assistant</label>
+                <textarea id="publicAssistantInput" name="prompt" maxlength="1200" rows="2" placeholder="Ask about Gatherly, events, or planning…" required></textarea>
+                <button type="submit" id="publicAssistantSend" aria-label="Send message">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 20 4l-5 16-3-7-8-1Zm8 1 8-9"></path></svg>
+                </button>
+            </form>
+            <p class="public-assistant-note">Messages are sent to Google Gemini. No booking or account data is added.</p>
+        </section>
+        <button class="public-assistant-launcher" id="publicAssistantToggle" type="button" aria-expanded="false" aria-controls="publicAssistantPanel" aria-label="Open Gatherly AI assistant">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.7 6.3L20 10l-6.3 1.7L12 18l-1.7-6.3L4 10l6.3-1.7L12 2Zm7 13 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"></path></svg>
+            <span>Ask Gatherly</span>
+        </button>
+    </aside>
+
+    <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/assistant-chat.js') }}"></script>
+</body>
+</html>

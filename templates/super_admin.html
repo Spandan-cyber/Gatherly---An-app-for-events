@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090b12">
+    <title>Super admin — Gatherly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/movies.css') }}">
+</head>
+<body class="movies-page">
+    {% with active_nav='admin' %}{% include '_navbar.html' %}{% endwith %}
+    <main class="movies-main cinema-manager-main">
+        <section class="movies-hero movie-manager-hero">
+            <span class="section-kicker">PLATFORM CONTROL</span>
+            <h1>Verified partners.<br><span>Trusted experiences.</span></h1>
+            <p>Provision test theatre and organizer accounts, and review verification requests.</p>
+        </section>
+        <div id="superAdminNotice" class="movie-notice hidden" role="status" aria-live="polite"></div>
+        <section class="cinema-manager-card movie-admin-analytics" aria-labelledby="movieAdminAnalyticsTitle">
+            <span class="section-kicker">MOVIE PLATFORM</span>
+            <h2 id="movieAdminAnalyticsTitle">Movie operations overview</h2>
+            <div id="movieAdminSummary" class="cinema-analytics-grid" aria-live="polite"></div>
+            <div id="movieTheatreAnalytics" class="cinema-manager-list" aria-live="polite"></div>
+        </section>
+        <section class="cinema-manager-layout">
+            <form id="provisionAccountForm" class="cinema-form">
+                <h2>Create verified organization</h2>
+                <div class="cinema-form-grid">
+                    <label>Organization<input name="organization_name" maxlength="160" required></label>
+                    <label>Account type<select name="account_type"><option value="THEATRE">Verified theatre</option><option value="ORGANIZER">Verified event organizer</option></select></label>
+                    <label>Account holder name<input name="full_name" maxlength="120" required></label>
+                    <label>Account email<input name="email" type="email" required placeholder="theatre@gatherly.theatre"></label>
+                    <label class="cinema-wide">Temporary password (12+ characters)<input name="password" type="password" minlength="12" autocomplete="new-password" required></label>
+                </div>
+                <p class="cinema-payment-note">Password is hashed before storage. Share temporary credentials securely and ask the account holder to change the password after first sign-in.</p>
+                <button class="btn-primary cinema-submit" type="submit">CREATE VERIFIED ACCOUNT</button>
+            </form>
+            <section class="cinema-manager-card">
+                <span class="section-kicker">BOOTSTRAP SECURITY</span>
+                <h2>Admin access</h2>
+                <p class="cinema-help">On first start, the bootstrap super-admin is created only when <code>SUPER_ADMIN_PASSWORD</code> is set in the local environment or .env file to at least 12 characters. No shared default password is shipped in source code.</p>
+                <p class="cinema-help">Use the fixed admin email <strong>admin@gatherly.in</strong> with that private bootstrap password. Protect the .env file and rotate the password after setup.</p>
+            </section>
+        </section>
+        <section class="cinema-manager-card" style="margin-top:1rem">
+            <span class="section-kicker">REVIEW QUEUE</span><h2>Organization verification requests</h2>
+            <div id="verificationRequests" class="cinema-manager-list"></div>
+        </section>
+        <section class="cinema-manager-card" style="margin-top:1rem">
+            <span class="section-kicker">PLATFORM PARTNERS</span><h2>Verified accounts</h2>
+            <div id="verifiedAccounts" class="cinema-manager-list"></div>
+        </section>
+    </main>
+    <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/super-admin.js') }}"></script>
+</body>
+</html>

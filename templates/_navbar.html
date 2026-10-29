@@ -1,0 +1,127 @@
+<header class="navbar{% if gate_mode %} gate-navbar{% endif %}">
+    <div class="nav-left">
+        <a href="/" class="logo">
+            <span class="logo-mark">G</span>
+            <span class="logo-text">GATHERLY<span class="dot">.</span></span>
+        </a>
+        {% if show_location %}
+        <button class="location-picker" onclick="getUserLocation()" title="Find events near your city">
+            <span class="icon">📍</span>
+            <span id="userLocationText">{{ user_city or 'Find my city' }}</span>
+        </button>
+        {% endif %}
+    </div>
+    <button
+        class="nav-mobile-toggle"
+        id="navMobileToggle"
+        type="button"
+        aria-label="Open navigation menu"
+        aria-expanded="false"
+        aria-controls="navMobileContent">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+    <div class="nav-mobile-content" id="navMobileContent">
+        <nav class="nav-center" aria-label="Main navigation">
+            <a href="/#events" class="nav-link{% if active_nav == 'discover' %} active{% endif %}"{% if active_nav == 'discover' %} aria-current="page"{% endif %}>Discover</a>
+            {% if show_home_actions %}
+            <a href="/#events" class="nav-link" id="calendarNavLink">Calendar</a>
+            <a href="javascript:void(0)" onclick="openCreateEventModal()" class="nav-link highlight">+ Host Event</a>
+            {% endif %}
+            <a href="/movies" class="nav-link{% if active_nav == 'movies' %} active{% endif %}"{% if active_nav == 'movies' %} aria-current="page"{% endif %}>Movies</a>
+            {% if not gate_mode and (user_name or user_id) %}
+            <a href="/movies/tickets" class="nav-link{% if active_nav == 'movie-tickets' %} active{% endif %}"{% if active_nav == 'movie-tickets' %} aria-current="page"{% endif %}>Movie tickets</a>
+            <a href="/host/dashboard" class="nav-link{% if active_nav == 'events' %} active{% endif %}"{% if active_nav == 'events' %} aria-current="page"{% endif %}>My events</a>
+            <a href="/account" class="nav-link{% if active_nav == 'account' %} active{% endif %}"{% if active_nav == 'account' %} aria-current="page"{% endif %}>My account</a>
+            {% endif %}
+            {% if not gate_mode and account_type == 'THEATRE' %}
+            <a href="/movies/manage" class="nav-link{% if active_nav == 'theatre' %} active{% endif %}"{% if active_nav == 'theatre' %} aria-current="page"{% endif %}>Theatre studio</a>
+            {% elif not gate_mode and account_type == 'ADMIN' %}
+            <a href="/super-admin" class="nav-link{% if active_nav == 'admin' %} active{% endif %}"{% if active_nav == 'admin' %} aria-current="page"{% endif %}>Admin</a>
+            {% endif %}
+        </nav>
+    </div>
+
+        <div class="nav-right">
+            <button id="siteThemeToggle" class="theme-btn" type="button" aria-label="Switch to light mode">
+                <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle class="theme-icon-sun" cx="12" cy="12" r="3.5"></circle>
+                    <path class="theme-icon-rays" d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path>
+                    <path class="theme-icon-moon" d="M20.2 15.2A8.5 8.5 0 0 1 8.8 3.8 8.6 8.6 0 1 0 20.2 15.2Z"></path>
+                </svg>
+            </button>
+            {% if show_home_actions and user_name %}
+            <details class="nav-account-menu">
+                <summary class="nav-account-trigger">
+                    <span class="nav-account-avatar" aria-hidden="true">✦</span>
+                    <span>My Gatherly</span>
+                    <span class="nav-account-chevron" aria-hidden="true">⌄</span>
+                    <span class="nav-total-badge" id="navTotalBadge" hidden></span>
+                </summary>
+
+                <div class="nav-account-dropdown">
+                    <div class="nav-dropdown-heading">
+                        <span class="nav-dropdown-eyebrow">YOUR SPACE</span>
+                        <strong>Everything in one place.</strong>
+                    </div>
+
+                    <button type="button" class="nav-dropdown-item"
+                            onclick="openInvitations()">
+                        <span class="nav-item-icon">✉</span>
+                        <span class="nav-item-copy">
+                            <strong>Invitations</strong>
+                            <small>Events and collaborations</small>
+                        </span>
+                        <span id="invitePendingCount"
+                            class="notification-count hidden"></span>
+                    </button>
+
+                    <button type="button" class="nav-dropdown-item"
+                            onclick="openEventUpdates()">
+                        <span class="nav-item-icon">↗</span>
+                        <span class="nav-item-copy">
+                            <strong>Event updates</strong>
+                            <small>News from your event hosts</small>
+                        </span>
+                        <span id="eventUpdateCount"
+                            class="notification-count hidden"></span>
+                    </button>
+
+                    <button type="button" class="nav-dropdown-item"
+                            onclick="openWishlist()">
+                        <span class="nav-item-icon">♡</span>
+                        <span class="nav-item-copy">
+                            <strong>Wishlist</strong>
+                            <small>Experiences you've saved</small>
+                        </span>
+                    </button>
+
+                    <button type="button" class="nav-dropdown-item"
+                            onclick="openPasses()">
+                        <span class="nav-item-icon">▤</span>
+                        <span class="nav-item-copy">
+                            <strong>My passes</strong>
+                            <small>Your event bookings</small>
+                        </span>
+                    </button>
+                </div>
+            </details>
+            {% endif %}
+            {% if gate_mode %}
+                {% if gate %}
+                <span class="welcome-user">Gate: <strong>{{ gate['display_name'] }}</strong></span>
+                <button id="gateSignOut" class="btn-primary btn-logout" type="button">SIGN OUT</button>
+                {% else %}
+                <span class="gate-access-label">THEATRE & EVENT STAFF ACCESS</span>
+                {% endif %}
+            {% elif user_name or user_id %}
+            {% if user_name %}<span class="welcome-user">Hi, <strong>{{ user_name }}</strong></span>{% endif %}
+            <button class="btn-primary btn-logout" type="button" data-site-signout>SIGN OUT</button>
+            {% else %}
+            <a class="btn-primary" href="/?auth=login{% if login_next %}&amp;next={{ login_next|urlencode }}{% endif %}">SIGN IN</a>
+            {% endif %}
+        </div>
+        
+</header>
+<script src="{{ url_for('static', filename='js/site-navbar.js') }}"></script>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090b12">
+    <title>Host dashboard — Gatherly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="host-dashboard-page" data-user-name="{{ user_name }}">
+    {% with active_nav='events' %}{% include '_navbar.html' %}{% endwith %}
+    <main class="host-dashboard-main">
+        <section class="host-welcome" id="overview">
+            <span class="section-kicker">HOST STUDIO</span>
+            <h1>Your events, all in one place.</h1>
+            <p>Manage bookings, guests, collaborators, and event-specific gate access.</p>
+            <div class="host-summary-grid" id="hostSummary" aria-live="polite">
+                <article class="host-summary-card"><span>EVENTS</span><strong>—</strong></article>
+                <article class="host-summary-card"><span>CONFIRMED GUESTS</span><strong>—</strong></article>
+                <article class="host-summary-card"><span>PEOPLE ADMITTED</span><strong>—</strong></article>
+                <article class="host-summary-card"><span>NEEDS ATTENTION</span><strong>—</strong></article>
+            </div>
+        </section>
+        <div id="hostNotice" class="host-notice hidden" role="status" aria-live="polite"></div>
+        <section class="host-section" id="hostEvents">
+            <div class="host-section-heading">
+                <div>
+                    <span class="section-kicker">EVENT CONTROL</span>
+                    <h2>Your events</h2>
+                </div>
+                <a class="btn-primary" href="/?create=1">CREATE EVENT</a>
+            </div>
+            <section id="newEventAssistant" aria-label="Create an event with AI"></section>
+            <div id="hostEventList" class="host-event-list" aria-live="polite">
+                <p class="empty-state">Loading your host workspace…</p>
+            </div>
+            <section id="hostSelectedEvent" class="host-selected-event hidden" aria-live="polite"></section>
+        </section>
+    </main>
+    <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/host-dashboard.js') }}"></script>
+</body>
+</html>
