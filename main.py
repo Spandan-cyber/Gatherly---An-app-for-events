@@ -443,6 +443,22 @@ def send_event_announcement_emails(recipients, event_title, title, message, in_a
             sent += 1
     return sent
 
+@app.route('/api/test-email-status', methods=['GET'])
+def test_email_status():
+    cfg = get_smtp_config()
+    has_user = bool(cfg["user"])
+    has_pwd = bool(cfg["password"])
+    masked_user = (cfg["user"][:3] + "***@" + cfg["user"].split("@")[-1]) if has_user and "@" in cfg["user"] else (cfg["user"] or None)
+    return jsonify({
+        "configured": bool(has_user and has_pwd),
+        "user_set": has_user,
+        "password_set": has_pwd,
+        "user_email": masked_user,
+        "password_length": len(cfg["password"]) if has_pwd else 0,
+        "host": cfg["host"],
+        "port": cfg["port"] or "Auto (587 TLS -> 465 SSL fallback)"
+    })
+
 @app.route('/uploads/<path:filename>')
 def serve_uploads(filename):
     with get_db() as conn:
