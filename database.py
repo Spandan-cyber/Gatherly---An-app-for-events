@@ -258,13 +258,21 @@ def translate_placeholders(sql: str) -> str:
 def format_sql_for_pg(sql: str) -> str:
     """
     Translates common SQLite SQL constructs into standard PostgreSQL:
-    1. PRAGMA table_info(tbl) -> information_schema query
-    2. PRAGMA foreign_keys -> SELECT 1
-    3. INSERT OR IGNORE INTO -> INSERT INTO ... ON CONFLICT DO NOTHING
-    4. COLLATE NOCASE -> stripped
-    5. ? -> %s
+    1. BEGIN IMMEDIATE / EXCLUSIVE -> SELECT 1
+    2. PRAGMA table_info(tbl) -> information_schema query
+    3. PRAGMA (foreign_keys / others) -> SELECT 1
+    4. INSERT OR IGNORE INTO -> INSERT INTO ... ON CONFLICT DO NOTHING
+    5. GROUP_CONCAT(expr, delim) -> STRING_AGG((expr)::text, delim)
+    6. COLLATE NOCASE -> stripped
+    7. BLOB -> BYTEA
+    8. ? -> %s
     """
     sql_trimmed = sql.strip()
+
+    # 0. Intercept SQLite transaction statements
+    clean_upper = re.sub(r'\s+', ' ', sql_trimmed.rstrip(';')).upper()
+    if clean_upper in ("BEGIN", "BEGIN IMMEDIATE", "BEGIN EXCLUSIVE", "BEGIN DEFERRED", "BEGIN TRANSACTION"):
+        return "SELECT 1"
 
     # 1. PRAGMA table_info(tbl)
     m = re.match(r'^\s*PRAGMA\s+table_info\((\w+)\)\s*;?\s*$', sql_trimmed, re.IGNORECASE)
@@ -275,8 +283,8 @@ def format_sql_for_pg(sql: str) -> str:
             f"WHERE lower(table_name) = lower('{table_name}') AND table_schema = current_schema()"
         )
 
-    # 2. PRAGMA foreign_keys = ON / OFF
-    if re.match(r'^\s*PRAGMA\s+foreign_keys', sql_trimmed, re.IGNORECASE):
+    # 2. PRAGMA foreign_keys = ON / OFF or any other PRAGMA
+    if re.match(r'^\s*PRAGMA\s+', sql_trimmed, re.IGNORECASE):
         return "SELECT 1"
 
     # 3. INSERT OR IGNORE INTO ...
@@ -288,10 +296,24 @@ def format_sql_for_pg(sql: str) -> str:
     # 4. Strip COLLATE NOCASE
     sql_trimmed = re.sub(r'\s+COLLATE\s+NOCASE', '', sql_trimmed, flags=re.IGNORECASE)
 
-    # 5. Translate BLOB type keyword to BYTEA for PostgreSQL
+    # 5. Translate GROUP_CONCAT(expr, delim) -> STRING_AGG((expr)::text, delim)
+    sql_trimmed = re.sub(
+        r'GROUP_CONCAT\s*\(\s*(.*?)\s*,\s*(\'[^\']*\')\s*\)',
+        r'STRING_AGG((\1)::text, \2)',
+        sql_trimmed,
+        flags=re.IGNORECASE
+    )
+    sql_trimmed = re.sub(
+        r'GROUP_CONCAT\s*\(\s*(.*?)\s*\)',
+        r"STRING_AGG((\1)::text, ',')",
+        sql_trimmed,
+        flags=re.IGNORECASE
+    )
+
+    # 6. Translate BLOB type keyword to BYTEA for PostgreSQL
     sql_trimmed = re.sub(r'\bBLOB\b', 'BYTEA', sql_trimmed, flags=re.IGNORECASE)
 
-    # 6. Translate ? to %s
+    # 7. Translate ? to %s
     return translate_placeholders(sql_trimmed)
 
 
@@ -313,6 +335,20 @@ class PostgresCursorWrapper:
         self.lastrowid: Optional[int] = None
 
     def execute(self, sql: str, params=None):
+        clean_upper = re.sub(r'\s+', ' ', sql.strip().rstrip(';')).upper()
+        if clean_upper in ("BEGIN", "BEGIN IMMEDIATE", "BEGIN EXCLUSIVE", "BEGIN DEFERRED", "BEGIN TRANSACTION"):
+            # PostgreSQL transactions are managed by psycopg2 and connection context manager.
+            # No-op to avoid syntax errors and save a network roundtrip.
+            return self
+        if clean_upper == "COMMIT":
+            if self._cursor and self._cursor.connection:
+                self._cursor.connection.commit()
+            return self
+        if clean_upper == "ROLLBACK":
+            if self._cursor and self._cursor.connection:
+                self._cursor.connection.rollback()
+            return self
+
         pg_sql = format_sql_for_pg(sql)
         self.lastrowid = None
 
@@ -504,9 +540,16 @@ def get_postgres_connection():
 
 
 def release_postgres_connection(raw_conn, error: bool = False):
-    """Return connection back to the pool."""
+    """Return connection back to the pool, ensuring clean transaction state."""
     pool = get_pg_pool()
     try:
+        if raw_conn is not None and not error:
+            try:
+                # Ensure connection is in a clean state (STATUS_READY = 0)
+                if hasattr(raw_conn, 'status') and raw_conn.status != 0:
+                    raw_conn.rollback()
+            except Exception:
+                error = True
         pool.putconn(raw_conn, close=error)
     except Exception as e:
         logger.warning("Error returning connection to pool: %s", e)
