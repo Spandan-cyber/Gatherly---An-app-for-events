@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 import qrcode
 from dotenv import load_dotenv
 from flask import Flask, abort, redirect, render_template, request, jsonify, session, send_file, send_from_directory, url_for
+from werkzeug.exceptions import HTTPException
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -335,6 +336,110 @@ def build_gatherly_email_html(subject, body_text, has_qr=False):
 </body>
 </html>"""
 
+def send_via_brevo(api_key, receiver_email, subject, body_text, html_content=None, qr_img_bytes=None):
+    sender_email = (
+        os.getenv("BREVO_SENDER_EMAIL")
+        or os.getenv("MAIL_DEFAULT_SENDER")
+        or os.getenv("MAIL_USERNAME")
+        or os.getenv("GMAIL_USER")
+        or "spandandasom40@gmail.com"
+    ).strip()
+    sender_name = os.getenv("BREVO_SENDER_NAME") or "Gatherly"
+
+    payload = {
+        "sender": {"name": sender_name, "email": sender_email},
+        "to": [{"email": receiver_email}],
+        "subject": subject,
+        "htmlContent": html_content or f"<pre style='font-family:sans-serif;'>{body_text}</pre>",
+        "textContent": body_text
+    }
+    if qr_img_bytes:
+        payload["attachment"] = [{
+            "name": "ticket_qr.png",
+            "content": base64.b64encode(qr_img_bytes).decode("ascii")
+        }]
+
+    try:
+        req = Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "api-key": api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "Gatherly/2.0"
+            },
+            method="POST"
+        )
+        with urlopen(req, timeout=12) as resp:
+            app.logger.info("Email delivered via Brevo HTTPS API (Port 443) to %s", receiver_email)
+            return resp.status in (200, 201, 202)
+    except HTTPError as e:
+        err_msg = ""
+        try:
+            err_msg = e.read().decode("utf-8")
+        except Exception:
+            pass
+        app.logger.warning("Brevo HTTPS API returned status %s: %s", e.code, err_msg)
+        return False
+    except Exception as e:
+        app.logger.warning("Brevo HTTPS API delivery error: %s", e)
+        return False
+
+def send_via_sendgrid(api_key, receiver_email, subject, body_text, html_content=None, qr_img_bytes=None):
+    sender_email = (
+        os.getenv("SENDGRID_SENDER_EMAIL")
+        or os.getenv("MAIL_DEFAULT_SENDER")
+        or os.getenv("MAIL_USERNAME")
+        or os.getenv("GMAIL_USER")
+        or "spandandasom40@gmail.com"
+    ).strip()
+    sender_name = os.getenv("SENDGRID_SENDER_NAME") or "Gatherly"
+
+    payload = {
+        "personalizations": [{"to": [{"email": receiver_email}]}],
+        "from": {"email": sender_email, "name": sender_name},
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": body_text},
+            {"type": "text/html", "value": html_content or f"<pre>{body_text}</pre>"}
+        ]
+    }
+    if qr_img_bytes:
+        payload["attachments"] = [{
+            "content": base64.b64encode(qr_img_bytes).decode("ascii"),
+            "filename": "ticket_qr.png",
+            "type": "image/png",
+            "disposition": "inline",
+            "content_id": "ticket_qr"
+        }]
+
+    try:
+        req = Request(
+            "https://api.sendgrid.com/v3/mail/send",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "Gatherly/2.0"
+            },
+            method="POST"
+        )
+        with urlopen(req, timeout=12) as resp:
+            app.logger.info("Email delivered via SendGrid HTTPS API (Port 443) to %s", receiver_email)
+            return resp.status in (200, 201, 202)
+    except HTTPError as e:
+        err_msg = ""
+        try:
+            err_msg = e.read().decode("utf-8")
+        except Exception:
+            pass
+        app.logger.warning("SendGrid HTTPS API returned status %s: %s", e.code, err_msg)
+        return False
+    except Exception as e:
+        app.logger.warning("SendGrid HTTPS API delivery error: %s", e)
+        return False
+
 def send_via_resend(api_key, receiver_email, subject, body_text, html_content=None, qr_img_bytes=None):
     from_email = os.getenv("RESEND_FROM") or "Gatherly <onboarding@resend.dev>"
     payload = {
@@ -370,7 +475,13 @@ def send_via_resend(api_key, receiver_email, subject, body_text, html_content=No
             err_msg = e.read().decode("utf-8")
         except Exception:
             pass
-        app.logger.warning("Resend HTTPS API returned status %s: %s", e.code, err_msg)
+        if e.code == 403 and "only send testing emails to your own email address" in err_msg:
+            app.logger.warning(
+                "Resend HTTPS API 403: Domain not verified. Resend test mode only delivers to your registered account owner email. "
+                "To deliver to ANY email on Render Free Tier without domain verification, add BREVO_API_KEY to Render Environment Variables."
+            )
+        else:
+            app.logger.warning("Resend HTTPS API returned status %s: %s", e.code, err_msg)
         return False
     except Exception as e:
         app.logger.warning("Resend HTTPS API delivery error: %s", e)
@@ -385,20 +496,32 @@ def send_email_with_qr(
 ):
     html_content = build_gatherly_email_html(subject, body_text, has_qr=bool(qr_img_bytes))
 
-    # 1. Try Resend HTTPS API first (works on Render free tier over Port 443)
+    # 1. Try Brevo HTTPS API first (ideal for Render free tier: sends to ANY recipient without domain verification)
+    brevo_key = (os.getenv("BREVO_API_KEY") or "").strip()
+    if brevo_key:
+        if send_via_brevo(brevo_key, receiver_email, subject, body_text, html_content, qr_img_bytes):
+            return True
+
+    # 2. Try Resend HTTPS API (works for registered account owner, or any recipient once a custom domain is verified)
     resend_key = (os.getenv("RESEND_API_KEY") or "").strip()
     if resend_key:
         if send_via_resend(resend_key, receiver_email, subject, body_text, html_content, qr_img_bytes):
             return True
 
-    # 2. Try SMTP (works locally, VPS, or paid Render)
+    # 3. Try SendGrid HTTPS API (works with single sender verification or verified domain)
+    sendgrid_key = (os.getenv("SENDGRID_API_KEY") or "").strip()
+    if sendgrid_key:
+        if send_via_sendgrid(sendgrid_key, receiver_email, subject, body_text, html_content, qr_img_bytes):
+            return True
+
+    # 4. Try SMTP (works locally, VPS, or paid Render)
     cfg = get_smtp_config()
     sender_email = cfg["user"]
     app_password = cfg["password"]
 
     if not sender_email or not app_password:
         app.logger.error(
-            "Email not sent: Neither RESEND_API_KEY nor SMTP credentials configured."
+            "Email not sent: Neither HTTPS API (Brevo/Resend/SendGrid) nor SMTP credentials configured."
         )
         if required:
             return False
@@ -494,22 +617,78 @@ def send_event_announcement_emails(recipients, event_title, title, message, in_a
 @app.route('/api/test-email-status', methods=['GET'])
 def test_email_status():
     cfg = get_smtp_config()
+    has_brevo = bool((os.getenv("BREVO_API_KEY") or "").strip())
     has_resend = bool((os.getenv("RESEND_API_KEY") or "").strip())
+    has_sendgrid = bool((os.getenv("SENDGRID_API_KEY") or "").strip())
     has_user = bool(cfg["user"])
     has_pwd = bool(cfg["password"])
     masked_user = (cfg["user"][:3] + "***@" + cfg["user"].split("@")[-1]) if has_user and "@" in cfg["user"] else (cfg["user"] or None)
+
+    active_transport = "None"
+    if has_brevo:
+        active_transport = "Brevo HTTPS API (Port 443 - Verified Sender, sends to ANY recipient)"
+    elif has_resend:
+        active_transport = "Resend HTTPS API (Port 443 - Note: Requires custom domain for arbitrary recipients)"
+    elif has_sendgrid:
+        active_transport = "SendGrid HTTPS API (Port 443)"
+    elif has_user and has_pwd:
+        active_transport = "SMTP (Gmail/Custom - Note: Blocked on Render Free Tier)"
+
     return jsonify({
-        "configured": bool(has_resend or (has_user and has_pwd)),
-        "resend_https_api_configured": has_resend,
-        "smtp_credentials_configured": bool(has_user and has_pwd),
-        "user_email": masked_user,
-        "smtp_host": cfg["host"],
-        "notice": (
-            "Ready to send via Resend HTTPS API (Port 443 - works on Render Free Tier!)"
+        "configured": bool(has_brevo or has_resend or has_sendgrid or (has_user and has_pwd)),
+        "active_transport": active_transport,
+        "brevo_https_configured": has_brevo,
+        "resend_https_configured": has_resend,
+        "sendgrid_https_configured": has_sendgrid,
+        "smtp_configured": bool(has_user and has_pwd),
+        "smtp_user": masked_user,
+        "recommendation": (
+            "Ready! Brevo HTTPS API is configured and will deliver OTPs and tickets to ANY recipient email."
+            if has_brevo else
+            "Resend is configured. Note: Resend test mode only delivers to your Resend account email (spandandasom40@gmail.com). To deliver to any user on Render Free Tier without a custom domain, add BREVO_API_KEY to Render Environment Variables."
             if has_resend else
-            "SMTP configured. Note: Render Free Tier blocks outbound SMTP ports (587, 465). For 100% reliable free email on Render, add RESEND_API_KEY to Render Environment Variables (free from resend.com)."
+            "SendGrid is configured."
+            if has_sendgrid else
+            "SMTP configured. Note: Render Free Tier firewalls block outbound SMTP (ports 587/465). For 100% reliable free email, add BREVO_API_KEY (free, no domain required) to Render Environment Variables."
         )
     })
+
+@app.route('/api/test-email-send', methods=['POST'])
+def test_email_send():
+    cfg = get_smtp_config()
+    default_target = (
+        cfg["user"]
+        or os.getenv("BREVO_SENDER_EMAIL")
+        or "spandandasom40@gmail.com"
+    )
+    data = request.get_json(silent=True) or {}
+    target_email = (data.get("email") or default_target).strip().lower()
+
+    allowed_targets = {default_target.lower()}
+    if session.get("user_email"):
+        allowed_targets.add(session["user_email"].lower())
+
+    if target_email not in allowed_targets:
+        return jsonify({
+            "success": False,
+            "message": f"Test emails can only be sent to your registered sender email ({default_target}) or logged in session."
+        }), 403
+
+    success = send_email_with_qr(
+        target_email,
+        "Gatherly Test Email",
+        "Congratulations! Your Gatherly email delivery system is working successfully.",
+        required=True
+    )
+    if success:
+        return jsonify({
+            "success": True,
+            "message": f"Test email sent successfully to {target_email}!"
+        })
+    return jsonify({
+        "success": False,
+        "message": f"Failed to send test email to {target_email}. Check Render logs for the exact provider response."
+    }), 500
 
 @app.route('/uploads/<path:filename>')
 def serve_uploads(filename):
@@ -5836,6 +6015,10 @@ def book_ticket():
         "message": "Payment request sent to the organizer" if is_paid else "Your passes are confirmed"
     })
 
+@app.route('/favicon.ico')
+def favicon():
+    return ('', 204)
+
 @app.errorhandler(500)
 def handle_internal_server_error(error):
     if request.path.startswith('/api/'):
@@ -5848,15 +6031,21 @@ def handle_internal_server_error(error):
 
 @app.errorhandler(Exception)
 def handle_unhandled_exception(error):
+    if isinstance(error, HTTPException):
+        if request.path.startswith('/api/'):
+            return jsonify({
+                "success": False,
+                "message": getattr(error, 'description', str(error) or "Resource not found.")
+            }), error.code
+        return error
+
+    app.logger.exception("Unhandled application error on %s: %s", request.path, error)
     if request.path.startswith('/api/'):
-        app.logger.exception("Unhandled API error on %s: %s", request.path, error)
-        status_code = getattr(error, 'code', 500)
-        description = getattr(error, 'description', str(error) or "An unexpected error occurred.")
         return jsonify({
             "success": False,
-            "message": str(description)
-        }), status_code
-    raise error
+            "message": "An internal server error occurred."
+        }), 500
+    return "Internal Server Error", 500
 
 if __name__ == '__main__':
     init_db()
