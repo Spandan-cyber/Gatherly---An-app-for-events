@@ -751,6 +751,19 @@ def gate_scanner_page():
             gate = None
     return render_template('gate.html', gate=gate, gate_type=gate_type if gate else None)
 
+def parse_dt(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+        except Exception:
+            return None
+    return None
+
 def generate_otp():
     return f"{secrets.randbelow(1_000_000):06d}"
 
@@ -760,11 +773,13 @@ def create_otp(conn, email, purpose):
         "SELECT expires_at FROM otps WHERE email = ? AND purpose = ? AND is_used = 0 ORDER BY id DESC LIMIT 1",
         (email, purpose)
     ).fetchone()
-    if recent and datetime.fromisoformat(recent["expires_at"]) > now + timedelta(minutes=9):
-        return None
+    if recent and recent["expires_at"]:
+        exp = parse_dt(recent["expires_at"])
+        if exp and exp > now + timedelta(minutes=9):
+            return None
 
     otp = generate_otp()
-    expires_at = now + timedelta(minutes=10)
+    expires_at = (now + timedelta(minutes=10)).isoformat(timespec="seconds")
     conn.execute(
         "UPDATE otps SET is_used = 1 WHERE email = ? AND purpose = ? AND is_used = 0",
         (email, purpose)
@@ -896,7 +911,8 @@ def format_event_time_display(value):
 
 
 def schedule_has_started(value):
-    return not value or datetime.fromisoformat(value) <= datetime.now()
+    dt = parse_dt(value)
+    return not dt or dt <= datetime.now()
 
 def tier_capacity_used(conn, tier_id):
     row = conn.execute(
@@ -2028,7 +2044,8 @@ def cinema_showtime_details(showtime_id):
         if not showtime:
             return jsonify({"success": False, "message": "Screening not found"}), 404
         is_manager = current_user_id() == showtime["manager_id"]
-        if datetime.fromisoformat(showtime["starts_at"]) < datetime.now() and not is_manager:
+        show_dt = parse_dt(showtime["starts_at"])
+        if show_dt and show_dt < datetime.now() and not is_manager:
             return jsonify({"success": False, "message": "This screening has already started"}), 404
         tiers = [
             dict(row) for row in conn.execute(
@@ -2625,7 +2642,8 @@ def reserve_cinema_seats(showtime_id):
             "SELECT * FROM cinema_showtimes WHERE id = ?",
             (showtime_id,)
         ).fetchone()
-        if not showtime or datetime.fromisoformat(showtime["starts_at"]) <= datetime.now():
+        show_dt = parse_dt(showtime["starts_at"]) if showtime else None
+        if not showtime or not show_dt or show_dt <= datetime.now():
             return jsonify({"success": False, "message": "This screening is not available"}), 404
         placeholders = ",".join("?" for _ in seat_ids)
         seats = conn.execute(
@@ -2803,7 +2821,8 @@ def confirm_cinema_reservation(reservation_id):
             return jsonify({"success": False, "message": "Reservation not found"}), 404
         if reservation["status"] != "PENDING":
             return jsonify({"success": False, "message": "This reservation is not awaiting confirmation"}), 409
-        if reservation["hold_expires_at"] and datetime.fromisoformat(reservation["hold_expires_at"]) <= datetime.now():
+        hold_dt = parse_dt(reservation["hold_expires_at"])
+        if hold_dt and hold_dt <= datetime.now():
             conn.execute(
                 "UPDATE cinema_reservations SET status = 'CANCELLED' WHERE id = ?",
                 (reservation_id,)
@@ -5657,8 +5676,9 @@ def accept_waitlist_offer(waitlist_id):
             "SELECT * FROM event_waitlist WHERE id = ? AND user_id = ?",
             (waitlist_id, current_user_id())
         ).fetchone()
-        if waitlist["status"] != "OFFERED" or not waitlist["offered_until"] or (
-            datetime.fromisoformat(waitlist["offered_until"]) <= datetime.now()
+        offered_dt = parse_dt(waitlist.get("offered_until")) if waitlist else None
+        if waitlist["status"] != "OFFERED" or not offered_dt or (
+            offered_dt <= datetime.now()
         ):
             return jsonify({"success": False, "message": "This ticket offer has expired"}), 409
         booking = conn.execute(
