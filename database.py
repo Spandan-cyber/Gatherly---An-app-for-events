@@ -42,7 +42,14 @@ except ImportError:
 DB_NAME = os.getenv("DB_NAME", "gatherly.db")
 DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL") or ""
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
+SUPABASE_KEY = (
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    or os.getenv("SUPABASE_KEY")
+    or os.getenv("SUPABASE_ANON_KEY")
+    or ""
+).strip()
 SUPABASE_DB_PASSWORD = os.getenv("SUPABASE_DB_PASSWORD") or os.getenv("SUPABASE_PASSWORD") or ""
 
 # Connection pool settings
@@ -587,7 +594,8 @@ def init_db(root_path: Optional[str] = None):
     logger.info("Initializing Gatherly database (Backend: %s)...", backend.upper())
 
     with get_db() as conn:
-        if backend == "postgres":
+        is_pg = isinstance(conn, PostgresConnectionWrapper)
+        if is_pg:
             # Run PostgreSQL schema
             schema_file = os.path.join(root_path, "schema_postgres.sql")
             if not os.path.exists(schema_file):

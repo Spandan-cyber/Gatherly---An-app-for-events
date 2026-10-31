@@ -31,6 +31,7 @@ from database import (
     get_db_backend,
     upload_to_supabase_storage,
     fetch_from_supabase_storage,
+    PostgresConnectionWrapper,
 )
 
 load_dotenv()
@@ -62,7 +63,8 @@ _GEMINI_REQUESTS_PER_HOUR = 12
 def init_db():
     global _database_initialized
     with get_db() as conn:
-        schema_file = "schema_postgres.sql" if is_postgres() else "schema.sql"
+        is_pg = isinstance(conn, PostgresConnectionWrapper)
+        schema_file = "schema_postgres.sql" if is_pg else "schema.sql"
         with open(os.path.join(app.root_path, schema_file), "r", encoding="utf-8") as f:
             conn.executescript(f.read())
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
@@ -111,7 +113,8 @@ def init_db():
         if "booking_id" not in ticket_columns:
             conn.execute("ALTER TABLE tickets ADD COLUMN booking_id INTEGER")
         if "qr_image" not in ticket_columns:
-            conn.execute("ALTER TABLE tickets ADD COLUMN qr_image BLOB")
+            col_type = "BYTEA" if is_pg else "BLOB"
+            conn.execute(f"ALTER TABLE tickets ADD COLUMN qr_image {col_type}")
         legacy_tickets = conn.execute(
             """SELECT t.id, t.event_id, t.user_id, t.payment_status, e.is_paid
                FROM tickets t JOIN events e ON e.id = t.event_id
@@ -145,7 +148,8 @@ def init_db():
         if "ticket_code" not in cinema_reservation_columns:
             conn.execute("ALTER TABLE cinema_reservations ADD COLUMN ticket_code TEXT")
         if "qr_image" not in cinema_reservation_columns:
-            conn.execute("ALTER TABLE cinema_reservations ADD COLUMN qr_image BLOB")
+            col_type = "BYTEA" if is_pg else "BLOB"
+            conn.execute(f"ALTER TABLE cinema_reservations ADD COLUMN qr_image {col_type}")
         if "hold_expires_at" not in cinema_reservation_columns:
             conn.execute("ALTER TABLE cinema_reservations ADD COLUMN hold_expires_at TEXT")
         if "admitted_count" not in cinema_reservation_columns:
