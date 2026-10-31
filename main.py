@@ -1101,7 +1101,7 @@ def super_admin_movie_analytics():
                    LEFT JOIN cinema_showtimes s ON s.manager_id = u.id
                    LEFT JOIN cinema_reservations r ON r.showtime_id = s.id
                    WHERE u.account_type = 'THEATRE' AND u.is_verified = 1
-                   GROUP BY u.id ORDER BY u.organization_name COLLATE NOCASE"""
+                   GROUP BY u.id, u.organization_name ORDER BY u.organization_name COLLATE NOCASE"""
             ).fetchall()
         ]
     return jsonify({"success": True, "summary": summary, "theatres": theatres})
@@ -1358,7 +1358,7 @@ def account_activity():
                    JOIN cinema_reservation_seats rs ON rs.reservation_id = r.id
                    JOIN cinema_seats c ON c.id = rs.seat_id
                    WHERE r.user_id = ?
-                   GROUP BY r.id ORDER BY r.created_at DESC LIMIT 100""",
+                   GROUP BY r.id, r.showtime_id, r.total_amount, r.status, r.payment_status, r.admitted_count, r.created_at, r.qr_image, s.film_title, s.theatre_name, s.screen_name, s.city, s.starts_at ORDER BY r.created_at DESC LIMIT 100""",
                 (user_id,)
             ).fetchall()
         ]
@@ -1759,7 +1759,7 @@ def cinema_manager_analytics():
                    FROM cinema_showtimes s
                    LEFT JOIN cinema_reservations r ON r.showtime_id = s.id
                    WHERE s.manager_id = ?
-                   GROUP BY s.id ORDER BY s.starts_at DESC LIMIT 100""",
+                   GROUP BY s.id, s.film_title, s.theatre_name, s.screen_name, s.city, s.starts_at ORDER BY s.starts_at DESC LIMIT 100""",
                 (current_user_id(),)
             ).fetchall()
         ]
@@ -1890,7 +1890,7 @@ def movie_gate_check_in():
                JOIN cinema_reservation_seats rs ON rs.reservation_id = r.id
                JOIN cinema_seats c ON c.id = rs.seat_id
                WHERE r.ticket_code = ? AND s.manager_id = ? AND s.starts_at <= ?
-               GROUP BY r.id""",
+               GROUP BY r.id, r.showtime_id, r.status, r.payment_status, r.admitted_count, u.full_name, s.film_title, s.starts_at, s.theatre_name, s.screen_name, s.city""",
             (qr_content, theatre_id, datetime.now().isoformat(timespec="minutes"))
         ).fetchone()
         if not reservation:
@@ -2381,7 +2381,7 @@ def my_cinema_reservations():
                JOIN cinema_reservation_seats rs ON rs.reservation_id = r.id
                JOIN cinema_seats c ON c.id = rs.seat_id
                WHERE r.user_id = ?
-               GROUP BY r.id ORDER BY r.created_at DESC""",
+               GROUP BY r.id, r.showtime_id, r.total_amount, r.status, r.payment_status, r.admitted_count, r.created_at, r.qr_image, s.film_title, s.theatre_name, s.screen_name, s.city, s.starts_at ORDER BY r.created_at DESC""",
             (current_user_id(),)
         ).fetchall()
     reservations = []
@@ -2433,7 +2433,7 @@ def cinema_manager_reservations():
                JOIN cinema_reservation_seats rs ON rs.reservation_id = r.id
                JOIN cinema_seats c ON c.id = rs.seat_id
                WHERE s.manager_id = ?
-               GROUP BY r.id ORDER BY r.created_at DESC""",
+               GROUP BY r.id, r.total_amount, r.status, r.payment_status, r.created_at, s.film_title, s.theatre_name, s.screen_name, s.starts_at, u.full_name ORDER BY r.created_at DESC""",
             (current_user_id(),)
         ).fetchall()
     return jsonify({"success": True, "reservations": [dict(row) for row in reservations]})
@@ -5020,7 +5020,7 @@ def my_passes():
                    JOIN cinema_showtimes s ON s.id = r.showtime_id
                    JOIN cinema_reservation_seats rs ON rs.reservation_id = r.id
                    JOIN cinema_seats c ON c.id = rs.seat_id
-                   WHERE r.user_id = ? GROUP BY r.id
+                   WHERE r.user_id = ? GROUP BY r.id, r.showtime_id, r.total_amount, r.status, r.payment_status, r.admitted_count, r.created_at, r.qr_image, s.film_title, s.starts_at, s.theatre_name, s.screen_name, s.city
                    ORDER BY r.created_at DESC LIMIT 100""",
                 (current_user_id(),)
             ).fetchall()
