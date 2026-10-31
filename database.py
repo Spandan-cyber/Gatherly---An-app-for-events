@@ -72,8 +72,8 @@ def normalize_postgres_url(url: str) -> str:
     url = url.strip()
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
-    # Supabase requires SSL; ensure sslmode is present if connecting to a remote host
-    if "sslmode=" not in url and ("supabase.co" in url or "pooler.supabase.com" in url):
+    # Any remote cloud host (Supabase, Render, Neon, etc.) requires SSL
+    if "sslmode=" not in url and not any(h in url.lower() for h in ("localhost", "127.0.0.1")):
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}sslmode=require"
     return url
@@ -517,17 +517,33 @@ def get_db():
     otherwise connects to local SQLite gatherly.db.
     """
     if is_postgres():
-        raw_conn = get_postgres_connection()
-        wrapper = PostgresConnectionWrapper(raw_conn)
-        error = False
+        raw_conn = None
         try:
-            with wrapper:
-                yield wrapper
-        except Exception:
-            error = True
-            raise
-        finally:
-            release_postgres_connection(raw_conn, error=error)
+            raw_conn = get_postgres_connection()
+            wrapper = PostgresConnectionWrapper(raw_conn)
+            error = False
+            try:
+                with wrapper:
+                    yield wrapper
+            except Exception:
+                error = True
+                raise
+            finally:
+                if raw_conn is not None:
+                    release_postgres_connection(raw_conn, error=error)
+        except Exception as e:
+            if raw_conn is None:
+                logger.error("PostgreSQL connection error: %s. Gracefully falling back to local SQLite.", e)
+                conn = sqlite3.connect(DB_NAME)
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA foreign_keys = ON")
+                try:
+                    with conn:
+                        yield conn
+                finally:
+                    conn.close()
+            else:
+                raise
     else:
         conn = sqlite3.connect(DB_NAME)
         conn.row_factory = sqlite3.Row

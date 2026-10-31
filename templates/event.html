@@ -15,6 +15,15 @@
             <div class="booking-loading">Gathering the details…</div>
         </div>
     </main>
+
+    <!-- Floating Ticket Booking & Confirmation Modal Overlay -->
+    <div id="bookingModalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="bookingModalTitle">
+        <div class="glass-modal booking-floating-modal">
+            <button class="close-modal-btn" type="button" aria-label="Close booking modal" onclick="closeBookingModal()">✕</button>
+            <div id="bookingConfirmation" class="booking-modal-body"></div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/floating-alert.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script src="{{ url_for('static', filename='js/booking.js') }}"></script>

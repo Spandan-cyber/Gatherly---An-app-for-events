@@ -32,6 +32,56 @@ function element(tag, className, text) {
     return node;
 }
 
+function ensureBookingModal() {
+    let overlay = document.getElementById('bookingModalOverlay');
+    if (!overlay) {
+        overlay = element('div', 'modal-overlay hidden');
+        overlay.id = 'bookingModalOverlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-labelledby', 'bookingModalTitle');
+
+        const card = element('div', 'glass-modal booking-floating-modal');
+        const closeBtn = element('button', 'close-modal-btn', '✕');
+        closeBtn.type = 'button';
+        closeBtn.setAttribute('aria-label', 'Close booking modal');
+        closeBtn.addEventListener('click', closeBookingModal);
+
+        const body = element('div', 'booking-modal-body');
+        body.id = 'bookingConfirmation';
+
+        card.append(closeBtn, body);
+        overlay.appendChild(card);
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeBookingModal();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !overlay.classList.contains('hidden')) {
+                closeBookingModal();
+            }
+        });
+
+        document.body.appendChild(overlay);
+    }
+    return overlay;
+}
+
+function openBookingModal() {
+    const overlay = ensureBookingModal();
+    overlay.classList.remove('hidden');
+    document.body.classList.add('modal-open');
+}
+
+function closeBookingModal() {
+    const overlay = document.getElementById('bookingModalOverlay');
+    if (overlay) overlay.classList.add('hidden');
+    document.body.classList.remove('modal-open');
+}
+window.closeBookingModal = closeBookingModal;
+window.openBookingModal = openBookingModal;
+
 function renderBookingError(message) {
     const content = document.getElementById('bookingPageContent');
     content.replaceChildren(
@@ -243,10 +293,8 @@ function renderBookingEvent(event) {
         shell.appendChild(gallerySection);
     }
 
-    const review = element('section', 'booking-confirmation hidden');
-    review.id = 'bookingConfirmation';
-    shell.appendChild(review);
     content.appendChild(shell);
+    ensureBookingModal();
     updateBookingTotal();
 }
 
@@ -317,12 +365,19 @@ async function toggleWishlist() {
     const response = await fetch(`/api/events/${bookingEvent.id}/wishlist`, {method});
     const data = await response.json();
     if (!response.ok || !data.success) {
-        window.alert(data.message || 'Wishlist could not be updated.');
+        if (typeof showFloatingAlert === 'function') {
+            showFloatingAlert(data.message || 'Wishlist could not be updated.', 'error');
+        } else {
+            window.alert(data.message || 'Wishlist could not be updated.');
+        }
         return;
     }
     bookingEvent.is_wishlisted = data.wishlisted;
     const button = document.querySelector('.booking-wishlist');
     if (button) button.textContent = data.wishlisted ? 'REMOVE FROM WISHLIST' : 'ADD TO WISHLIST';
+    if (typeof showFloatingAlert === 'function') {
+        showFloatingAlert(data.wishlisted ? 'Added to your wishlist!' : 'Removed from wishlist.', 'info');
+    }
 }
 
 async function refreshWaitlistState() {
@@ -330,22 +385,40 @@ async function refreshWaitlistState() {
     const response = await fetch(`/api/events/${bookingEvent.id}/waitlist`);
     const data = await response.json();
     if (!response.ok || !data.success || !data.waitlist) return;
-    const review = document.getElementById('bookingConfirmation');
-    if (!review || review.dataset.waitlistId === String(data.waitlist.id)) return;
-    review.dataset.waitlistId = String(data.waitlist.id);
-    review.replaceChildren();
-    review.classList.remove('hidden');
-    review.append(element('span', 'section-kicker', 'TICKET QUEUE'),
-        element('h2', 'booking-section-title', data.waitlist.status === 'OFFERED' ? 'Your ticket offer is ready.' : 'You’re in the queue.'),
-        element('p', 'event-detail-description', data.waitlist.status === 'OFFERED'
-            ? `Accept before ${data.waitlist.offered_until} to secure your place.`
-            : `Queue position ${data.position}. Requests are offered in order, with a short 5–7 minute hold.`));
-    if (data.waitlist.status === 'OFFERED') {
-        const accept = element('button', 'btn-primary booking-continue', 'ACCEPT TICKET OFFER');
+
+    const modalBody = document.getElementById('bookingConfirmation');
+    if (!modalBody || modalBody.dataset.waitlistId === String(data.waitlist.id)) return;
+    modalBody.dataset.waitlistId = String(data.waitlist.id);
+    modalBody.replaceChildren();
+
+    const isOffered = data.waitlist.status === 'OFFERED';
+    const badgeWrap = element('div', 'booking-success-badge-wrap');
+    badgeWrap.appendChild(element('div', `booking-status-icon ${isOffered ? 'confirmed' : 'pending'}`, isOffered ? '🎟️' : '⏱'));
+
+    const kicker = element('span', 'section-kicker', 'TICKET QUEUE');
+    const title = element('h2', 'modal-title', isOffered ? 'Your ticket offer is ready!' : 'You’re in the queue.');
+    title.id = 'bookingModalTitle';
+
+    const desc = element('p', 'booking-modal-message', isOffered
+        ? `Accept before ${data.waitlist.offered_until} to secure your place.`
+        : `Queue position: #${data.position}. Requests are offered in order with a short 5–7 minute hold.`);
+
+    modalBody.append(badgeWrap, kicker, title, desc);
+
+    const actions = element('div', 'booking-modal-actions');
+    if (isOffered) {
+        const accept = element('button', 'btn-primary booking-submit-btn', 'ACCEPT TICKET OFFER');
         accept.type = 'button';
         accept.addEventListener('click', () => acceptWaitlistOffer(data.waitlist.id));
-        review.appendChild(accept);
+        actions.appendChild(accept);
     }
+    const closeBtn = element('button', 'btn-primary btn-logout booking-modal-back', 'DISMISS');
+    closeBtn.type = 'button';
+    closeBtn.addEventListener('click', closeBookingModal);
+    actions.appendChild(closeBtn);
+
+    modalBody.appendChild(actions);
+    openBookingModal();
 }
 
 async function joinWaitlist() {
@@ -360,8 +433,15 @@ async function joinWaitlist() {
     });
     const data = await response.json();
     if (!response.ok || !data.success) {
-        window.alert(data.message || 'Could not join the ticket queue.');
+        if (typeof showFloatingAlert === 'function') {
+            showFloatingAlert(data.message || 'Could not join ticket queue.', 'error');
+        } else {
+            window.alert(data.message || 'Could not join the ticket queue.');
+        }
         return;
+    }
+    if (typeof showFloatingAlert === 'function') {
+        showFloatingAlert('You joined the ticket waitlist!', 'success');
     }
     refreshWaitlistState();
 }
@@ -370,20 +450,63 @@ async function acceptWaitlistOffer(waitlistId) {
     const response = await fetch(`/api/waitlist/${waitlistId}/accept`, {method: 'POST'});
     const data = await response.json();
     if (!response.ok || !data.success) {
-        window.alert(data.message || 'This offer could not be accepted.');
+        if (typeof showFloatingAlert === 'function') {
+            showFloatingAlert(data.message || 'This offer could not be accepted.', 'error');
+        } else {
+            window.alert(data.message || 'This offer could not be accepted.');
+        }
         refreshWaitlistState();
         return;
     }
+
+    const modalBody = document.getElementById('bookingConfirmation');
+    modalBody.replaceChildren();
+
+    const badgeWrap = element('div', 'booking-success-badge-wrap');
+    badgeWrap.appendChild(element('div', 'booking-status-icon confirmed', '✓'));
+
+    modalBody.append(
+        badgeWrap,
+        element('span', 'section-kicker', 'OFFER ACCEPTED'),
+        element('h2', 'modal-title', 'Your place is saved!'),
+        element('p', 'booking-modal-message', data.message)
+    );
+
     if (data.qr_url) {
-        const review = document.getElementById('bookingConfirmation');
-        review.replaceChildren(element('h2', 'booking-section-title', 'Your place is saved.'));
+        const ticketCard = element('div', 'booking-pass-card');
+        const ticketTop = element('div', 'booking-pass-header');
+        ticketTop.append(
+            element('strong', 'booking-pass-title', bookingEvent.title),
+            element('span', 'booking-pass-chip', `${bookingQuantity} ${bookingQuantity === 1 ? 'Attendee' : 'Attendees'}`)
+        );
+
+        const qrWrap = element('div', 'booking-pass-qr-wrap');
         const qr = element('img', 'saved-ticket-qr');
         qr.src = data.qr_url;
         qr.alt = 'Your Gatherly ticket QR code';
-        review.append(qr, element('p', 'booking-payment-note', data.message));
-    } else {
-        window.alert(data.message);
+        qrWrap.appendChild(qr);
+
+        const qrNote = element('p', 'booking-pass-instruction',
+            `One QR admits your party. Scan once per attendee at the entrance.`);
+
+        const download = element('a', 'btn-primary booking-download-btn', 'DOWNLOAD PASS (PNG)');
+        download.href = data.qr_url;
+        download.download = `gatherly-pass-${bookingEvent.id}.png`;
+
+        ticketCard.append(ticketTop, qrWrap, qrNote, download);
+        modalBody.appendChild(ticketCard);
     }
+
+    const actions = element('div', 'booking-modal-actions');
+    const passes = element('a', 'btn-primary', 'VIEW ALL MY PASSES');
+    passes.href = '/?passes=1';
+    const doneBtn = element('button', 'btn-primary btn-logout', 'DONE');
+    doneBtn.type = 'button';
+    doneBtn.addEventListener('click', closeBookingModal);
+    actions.append(passes, doneBtn);
+    modalBody.appendChild(actions);
+
+    openBookingModal();
 }
 
 function reviewBooking() {
@@ -391,84 +514,211 @@ function reviewBooking() {
     const remaining = tier ? tier.tickets_remaining : bookingEvent.tickets_remaining;
     if (!Number.isInteger(bookingQuantity) || bookingQuantity < 1 ||
         bookingQuantity > 20 || (remaining !== null && remaining > 0 && bookingQuantity > remaining)) {
-        window.alert('Choose a valid quantity within the remaining capacity.');
+        if (typeof showFloatingAlert === 'function') {
+            showFloatingAlert('Choose a valid ticket quantity within remaining capacity (1–20).', 'error');
+        } else {
+            window.alert('Choose a valid quantity within the remaining capacity.');
+        }
         return;
     }
+
+    ensureBookingModal();
     const review = document.getElementById('bookingConfirmation');
     review.replaceChildren();
-    review.classList.remove('hidden');
-    review.append(
-        element('h2', 'booking-section-title', 'One last thing.'),
-        element('p', 'event-detail-description',
-            `${bookingQuantity} ${bookingQuantity === 1 ? 'person' : 'people'} · ${bookingEvent.title} · ₹${(
-                (tier ? Number(tier.price) : (bookingEvent.is_paid ? Number(bookingEvent.price) : 0)) * bookingQuantity
-            ).toFixed(2)}`),
-        element('p', 'booking-payment-note', (tier ? Number(tier.price) > 0 : bookingEvent.is_paid)
-            ? 'This requests a reservation. It is not paid or confirmed until the organizer verifies your payment.'
-            : 'Confirm to reserve your places and create one QR pass for your whole party.')
+
+    // 1. Header
+    const kicker = element('span', 'section-kicker', 'CONFIRM RESERVATION');
+    const title = element('h2', 'modal-title', 'Review your booking');
+    title.id = 'bookingModalTitle';
+
+    // 2. Event Snippet Box
+    const eventCard = element('div', 'booking-modal-event-card');
+    const coverPath = bookingEvent.cover_image || bookingEvent.main_image;
+    if (coverPath) {
+        const thumb = element('img', 'booking-modal-thumb');
+        thumb.src = `/uploads/${coverPath}`;
+        thumb.alt = '';
+        eventCard.appendChild(thumb);
+    }
+    const eventMeta = element('div', 'booking-modal-event-meta');
+    const evTitle = element('h3', 'booking-modal-ev-title', bookingEvent.title);
+    const evWhen = element('p', 'booking-modal-ev-detail',
+        `📅 ${formatGatherlyDate(bookingEvent.event_date)} at ${formatGatherlyTime(bookingEvent.event_time)}`);
+    const evWhere = element('p', 'booking-modal-ev-detail',
+        `📍 ${bookingEvent.venue}, ${bookingEvent.city}`);
+    eventMeta.append(evTitle, evWhen, evWhere);
+    eventCard.appendChild(eventMeta);
+
+    // 3. Breakdown Summary Card
+    const unitPrice = tier ? Number(tier.price) : (bookingEvent.is_paid ? Number(bookingEvent.price) : 0);
+    const totalPrice = unitPrice * bookingQuantity;
+    const isPaid = unitPrice > 0;
+
+    const breakdown = element('div', 'booking-modal-summary');
+    const tierRow = element('div', 'booking-summary-row');
+    tierRow.append(
+        element('span', 'summary-label', 'Ticket Type'),
+        element('strong', 'summary-value', tier ? tier.name : 'General Admission')
     );
-    const paid = tier ? Number(tier.price) > 0 : bookingEvent.is_paid;
-    const confirm = element('button', 'btn-primary booking-continue', paid ? 'REQUEST RESERVATION' : 'CONFIRM & GET PASS');
-    confirm.type = 'button';
-    confirm.addEventListener('click', submitBooking);
-    const edit = element('button', 'btn-primary btn-logout booking-edit', 'CHANGE QUANTITY');
-    edit.type = 'button';
-    edit.addEventListener('click', () => review.classList.add('hidden'));
-    review.append(confirm, edit);
-    review.scrollIntoView({behavior: 'smooth', block: 'center'});
+    const qtyRow = element('div', 'booking-summary-row');
+    qtyRow.append(
+        element('span', 'summary-label', 'Attendees'),
+        element('strong', 'summary-value', `${bookingQuantity} ${bookingQuantity === 1 ? 'Person' : 'People'}`)
+    );
+    const rateRow = element('div', 'booking-summary-row');
+    rateRow.append(
+        element('span', 'summary-label', 'Price per ticket'),
+        element('strong', 'summary-value', unitPrice > 0 ? `₹${unitPrice.toFixed(2)}` : 'Free')
+    );
+    const totalRow = element('div', 'booking-summary-row booking-summary-total');
+    totalRow.append(
+        element('span', 'summary-label', 'Total Amount'),
+        element('strong', 'summary-value total-accent', totalPrice > 0 ? `₹${totalPrice.toFixed(2)}` : 'Free')
+    );
+    breakdown.append(tierRow, qtyRow, rateRow, totalRow);
+
+    // 4. Policy Notice
+    const notice = element('p', 'booking-modal-notice', isPaid
+        ? 'ℹ️ Paid reservations are confirmed once payment is verified by the organizer. You will receive an email upon confirmation.'
+        : '✨ Instant admission. One single QR pass will be issued that admits all attendees in your booking.');
+
+    // 5. Action Buttons
+    const actions = element('div', 'booking-modal-actions');
+    const confirmBtn = element('button', 'btn-primary booking-submit-btn',
+        isPaid ? 'REQUEST RESERVATION' : 'CONFIRM & GET PASS');
+    confirmBtn.type = 'button';
+    confirmBtn.id = 'bookingConfirmBtn';
+    confirmBtn.addEventListener('click', submitBooking);
+
+    const editBtn = element('button', 'btn-primary btn-logout booking-modal-back', 'CHANGE QUANTITY');
+    editBtn.type = 'button';
+    editBtn.addEventListener('click', closeBookingModal);
+
+    actions.append(confirmBtn, editBtn);
+
+    review.append(kicker, title, eventCard, breakdown, notice, actions);
+    openBookingModal();
 }
 
 async function submitBooking() {
-    const response = await fetch('/api/book-ticket', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({event_id: bookingEvent.id, quantity: bookingQuantity, tier_id: selectedTierId})
-    });
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-        if (response.status === 401) {
-            window.location.assign(`/?auth=login&next=${encodeURIComponent(window.location.pathname)}`);
-            return;
-        }
-        if (data.queued) {
-            refreshWaitlistState();
-            return;
-        }
-        window.alert(data.message || 'Booking could not be completed.');
-        return;
+    const confirmBtn = document.getElementById('bookingConfirmBtn');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Securing your spots...';
     }
 
-    const confirmation = document.getElementById('bookingConfirmation');
-    confirmation.replaceChildren();
-    confirmation.append(
-        element('span', 'section-kicker', data.status === 'PENDING' ? 'REQUEST RECEIVED' : 'YOU’RE GOING'),
-        element('h2', 'booking-section-title', data.status === 'PENDING' ? 'With the host for confirmation.' : 'Your place is saved.'),
-        element('p', 'event-detail-description', data.message)
-    );
-    if (data.qr_url) {
-        const pass = element('div', 'booking-qr-pass');
-        const image = element('img', 'saved-ticket-qr');
-        image.src = data.qr_url;
-        image.alt = 'Your saved Gatherly ticket QR code';
-        image.addEventListener('error', () => {
-            image.alt = 'QR image is not available. Open My Passes after signing in to reload it.';
+    try {
+        const response = await fetch('/api/book-ticket', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({event_id: bookingEvent.id, quantity: bookingQuantity, tier_id: selectedTierId})
         });
-        const passDetails = element('div', '');
-        passDetails.append(
-            element('p', 'booking-payment-note', `One QR admits ${bookingQuantity} people, one at a time. Each scan admits the next person.`),
-            element('a', 'btn-primary booking-download', 'DOWNLOAD QR')
-        );
-        const download = passDetails.querySelector('a');
-        download.href = data.qr_url;
-        download.download = 'gatherly-pass.png';
-        pass.append(image, passDetails);
-        confirmation.appendChild(pass);
-        confirmation.appendChild(element('p', 'booking-payment-note',
-            data.email_sent ? 'A copy of this same QR was emailed to you.' : 'The QR is saved to your Gatherly passes. Email delivery did not succeed.'));
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            if (response.status === 401) {
+                closeBookingModal();
+                window.location.assign(`/?auth=login&next=${encodeURIComponent(window.location.pathname)}`);
+                return;
+            }
+            if (data.queued) {
+                closeBookingModal();
+                refreshWaitlistState();
+                return;
+            }
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'TRY AGAIN';
+            }
+            if (typeof showFloatingAlert === 'function') {
+                showFloatingAlert(data.message || 'Booking could not be completed.', 'error');
+            } else {
+                window.alert(data.message || 'Booking could not be completed.');
+            }
+            return;
+        }
+
+        // Render Confirmed Success State in the floating modal
+        const confirmation = document.getElementById('bookingConfirmation');
+        confirmation.replaceChildren();
+
+        const isPending = data.status === 'PENDING';
+
+        const badgeWrapper = element('div', 'booking-success-badge-wrap');
+        const badgeIcon = element('div', `booking-status-icon ${isPending ? 'pending' : 'confirmed'}`, isPending ? '⏱' : '✓');
+        badgeWrapper.appendChild(badgeIcon);
+
+        const kicker = element('span', 'section-kicker', isPending ? 'REQUEST RECEIVED' : 'YOU’RE GOING!');
+        const title = element('h2', 'modal-title', isPending ? 'With the host for approval.' : 'Your place is confirmed.');
+        title.id = 'bookingModalTitle';
+
+        const description = element('p', 'booking-modal-message', data.message || (isPending
+            ? 'The organizer will review your payment. Your pass will be issued once approved.'
+            : 'Your pass is ready! Present this QR at the gate for entry.'));
+
+        confirmation.append(badgeWrapper, kicker, title, description);
+
+        if (data.qr_url) {
+            const ticketCard = element('div', 'booking-pass-card');
+
+            const ticketTop = element('div', 'booking-pass-header');
+            ticketTop.append(
+                element('strong', 'booking-pass-title', bookingEvent.title),
+                element('span', 'booking-pass-chip', `${bookingQuantity} ${bookingQuantity === 1 ? 'Attendee' : 'Attendees'}`)
+            );
+
+            const qrWrap = element('div', 'booking-pass-qr-wrap');
+            const image = element('img', 'saved-ticket-qr');
+            image.src = data.qr_url;
+            image.alt = 'Your saved Gatherly ticket QR code';
+            image.addEventListener('error', () => {
+                image.alt = 'QR image is not available. Open My Passes after signing in to reload it.';
+            });
+            qrWrap.appendChild(image);
+
+            const qrInstruction = element('p', 'booking-pass-instruction',
+                `One QR admits ${bookingQuantity} ${bookingQuantity === 1 ? 'person' : 'people'}. Scanned one person at a time at the entrance.`);
+
+            const downloadLink = element('a', 'btn-primary booking-download-btn', 'DOWNLOAD PASS (PNG)');
+            downloadLink.href = data.qr_url;
+            downloadLink.download = `gatherly-pass-${bookingEvent.id}.png`;
+
+            ticketCard.append(ticketTop, qrWrap, qrInstruction, downloadLink);
+            confirmation.appendChild(ticketCard);
+
+            const emailNote = element('p', 'booking-email-note',
+                data.email_sent ? '✉️ A copy of this same QR was emailed to you.' : '📱 The QR is saved to your Gatherly passes.');
+            confirmation.appendChild(emailNote);
+        }
+
+        const actions = element('div', 'booking-modal-actions');
+        const passes = element('a', 'btn-primary', 'VIEW ALL MY PASSES');
+        passes.href = '/?passes=1';
+
+        const doneBtn = element('button', 'btn-primary btn-logout', 'DONE');
+        doneBtn.type = 'button';
+        doneBtn.addEventListener('click', () => {
+            closeBookingModal();
+            loadBookingPage();
+        });
+
+        actions.append(passes, doneBtn);
+        confirmation.appendChild(actions);
+
+        if (typeof showFloatingAlert === 'function') {
+            showFloatingAlert(isPending ? 'Reservation request submitted!' : 'Tickets booked successfully! 🎉', 'success');
+        }
+
+        openBookingModal();
+
+    } catch (err) {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'TRY AGAIN';
+        }
+        if (typeof showFloatingAlert === 'function') {
+            showFloatingAlert('Network or server error while booking.', 'error');
+        } else {
+            window.alert('Network error while booking.');
+        }
     }
-    const passes = element('a', 'back-link', 'View all my passes →');
-    passes.href = '/?passes=1';
-    confirmation.appendChild(passes);
-    confirmation.classList.remove('hidden');
-    confirmation.scrollIntoView({behavior: 'smooth', block: 'center'});
 }

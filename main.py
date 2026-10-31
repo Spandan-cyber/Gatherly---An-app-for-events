@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from flask import Flask, abort, redirect, render_template, request, jsonify, session, send_file, send_from_directory, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
@@ -35,6 +36,7 @@ from database import (
 load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -214,14 +216,12 @@ def add_security_headers(response):
 def public_base_url():
     configured = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
     if configured:
-        parsed = urlsplit(configured)
-        if parsed.scheme not in ("https", "http") or not parsed.netloc or parsed.username or parsed.password:
-            return None
-        if parsed.scheme != "https" and parsed.hostname not in ("localhost", "127.0.0.1"):
-            return None
         return configured
-    if request.host in ("localhost", "localhost:5000", "127.0.0.1", "127.0.0.1:5000"):
-        return request.url_root.rstrip("/")
+    try:
+        if request and request.url_root:
+            return request.url_root.rstrip("/")
+    except Exception:
+        pass
     return None
 
 def send_email_with_qr(
@@ -3325,7 +3325,6 @@ def consume_gemini_request(user_id):
         return True
 
 @app.route('/api/assistant/chat', methods=['POST'])
-@app.route('/api/assistant/chat', methods=['POST'])
 def public_assistant_chat():
     data = request.get_json(silent=True)
 
@@ -5393,6 +5392,29 @@ def book_ticket():
         "message": "Payment request sent to the organizer" if is_paid else "Your passes are confirmed"
     })
 
+@app.errorhandler(500)
+def handle_internal_server_error(error):
+    if request.path.startswith('/api/'):
+        app.logger.exception("Internal Server Error on %s", request.path)
+        return jsonify({
+            "success": False,
+            "message": "An internal server error occurred. Please check server logs."
+        }), 500
+    return "Internal Server Error", 500
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(error):
+    if request.path.startswith('/api/'):
+        app.logger.exception("Unhandled API error on %s: %s", request.path, error)
+        status_code = getattr(error, 'code', 500)
+        description = getattr(error, 'description', str(error) or "An unexpected error occurred.")
+        return jsonify({
+            "success": False,
+            "message": str(description)
+        }), status_code
+    raise error
+
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0',debug=False, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', debug=False, port=port)

@@ -776,13 +776,16 @@ function reviewBooking() {
     review.replaceChildren();
     review.classList.remove('hidden');
     const heading = document.createElement('h3');
+    heading.className = 'booking-modal-ev-title';
     heading.textContent = 'Confirm your booking';
     const summary = document.createElement('p');
+    summary.className = 'booking-modal-ev-detail';
     summary.textContent = `${selectedQuantity} × ${selectedEvent.title} · Total ₹${(price * selectedQuantity).toFixed(2)}`;
     const note = document.createElement('p');
+    note.className = 'booking-modal-notice';
     note.textContent = selectedEvent.is_paid
-        ? 'This is a payment request, not a confirmed ticket. The organizer must verify payment before passes are issued.'
-        : 'Your free passes will be confirmed immediately.';
+        ? 'ℹ️ This is a payment request, not a confirmed ticket. The organizer must verify payment before passes are issued.'
+        : '✨ Your free passes will be confirmed immediately.';
     const confirm = document.createElement('button');
     confirm.type = 'button';
     confirm.className = 'btn-primary';
@@ -826,11 +829,26 @@ async function confirmBooking() {
     content.append(title, message);
     if (data.qr_url) {
         const pass = document.createElement('div');
-        pass.className = 'ticket-pass';
+        pass.className = 'booking-pass-card';
+        const qrWrap = document.createElement('div');
+        qrWrap.className = 'booking-pass-qr-wrap';
         const qr = document.createElement('img');
+        qr.className = 'saved-ticket-qr';
         qr.src = data.qr_url;
         qr.alt = 'Saved ticket QR code';
-        pass.appendChild(qr);
+        qrWrap.appendChild(qr);
+
+        const qrInstruction = document.createElement('p');
+        qrInstruction.className = 'booking-pass-instruction';
+        qrInstruction.textContent = `One QR admits ${selectedQuantity} ${selectedQuantity === 1 ? 'person' : 'people'}. Scanned one person at a time at the entrance.`;
+
+        const downloadLink = document.createElement('a');
+        downloadLink.className = 'btn-primary booking-download-btn';
+        downloadLink.href = data.qr_url;
+        downloadLink.download = `gatherly-pass-${selectedEvent.id}.png`;
+        downloadLink.textContent = 'DOWNLOAD PASS (PNG)';
+
+        pass.append(qrWrap, qrInstruction, downloadLink);
         content.appendChild(pass);
     }
     document.getElementById('eventBookingReview').classList.add('hidden');
