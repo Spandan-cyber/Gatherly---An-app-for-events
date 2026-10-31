@@ -1,127 +1,289 @@
-<header class="navbar{% if gate_mode %} gate-navbar{% endif %}">
-    <div class="nav-left">
-        <a href="/" class="logo">
-            <span class="logo-mark">G</span>
-            <span class="logo-text">GATHERLY<span class="dot">.</span></span>
-        </a>
-        {% if show_location %}
-        <button class="location-picker" onclick="getUserLocation()" title="Find events near your city">
-            <span class="icon">📍</span>
-            <span id="userLocationText">{{ user_city or 'Find my city' }}</span>
-        </button>
-        {% endif %}
-    </div>
-    <button
-        class="nav-mobile-toggle"
-        id="navMobileToggle"
-        type="button"
-        aria-label="Open navigation menu"
-        aria-expanded="false"
-        aria-controls="navMobileContent">
-        <span></span>
-        <span></span>
-        <span></span>
-    </button>
-    <div class="nav-mobile-content" id="navMobileContent">
-        <nav class="nav-center" aria-label="Main navigation">
-            <a href="/#events" class="nav-link{% if active_nav == 'discover' %} active{% endif %}"{% if active_nav == 'discover' %} aria-current="page"{% endif %}>Discover</a>
-            {% if show_home_actions %}
-            <a href="/#events" class="nav-link" id="calendarNavLink">Calendar</a>
-            <a href="javascript:void(0)" onclick="openCreateEventModal()" class="nav-link highlight">+ Host Event</a>
-            {% endif %}
-            <a href="/movies" class="nav-link{% if active_nav == 'movies' %} active{% endif %}"{% if active_nav == 'movies' %} aria-current="page"{% endif %}>Movies</a>
-            {% if not gate_mode and (user_name or user_id) %}
-            <a href="/movies/tickets" class="nav-link{% if active_nav == 'movie-tickets' %} active{% endif %}"{% if active_nav == 'movie-tickets' %} aria-current="page"{% endif %}>Movie tickets</a>
-            <a href="/host/dashboard" class="nav-link{% if active_nav == 'events' %} active{% endif %}"{% if active_nav == 'events' %} aria-current="page"{% endif %}>My events</a>
-            <a href="/account" class="nav-link{% if active_nav == 'account' %} active{% endif %}"{% if active_nav == 'account' %} aria-current="page"{% endif %}>My account</a>
-            {% endif %}
-            {% if not gate_mode and account_type == 'THEATRE' %}
-            <a href="/movies/manage" class="nav-link{% if active_nav == 'theatre' %} active{% endif %}"{% if active_nav == 'theatre' %} aria-current="page"{% endif %}>Theatre studio</a>
-            {% elif not gate_mode and account_type == 'ADMIN' %}
-            <a href="/super-admin" class="nav-link{% if active_nav == 'admin' %} active{% endif %}"{% if active_nav == 'admin' %} aria-current="page"{% endif %}>Admin</a>
-            {% endif %}
-        </nav>
-    </div>
+{% set current_user_name = user_name or session.get('user_name') %}
+{% set current_account_type = account_type or session.get('account_type') or 'USER' %}
+{% set is_signed_in = not gate_mode and (current_user_name or user_id or session.get('user_id')) %}
 
+<header class="navbar{% if gate_mode %} gate-navbar{% endif %}" id="mainSiteNavbar">
+    <div class="nav-container">
+        <!-- Brand / Left -->
+        <div class="nav-left">
+            <a href="/" class="logo" aria-label="Gatherly Home">
+                <span class="logo-mark">G</span>
+                <span class="logo-text">GATHERLY<span class="dot">.</span></span>
+            </a>
+            {% if show_location %}
+            <button class="location-picker" onclick="getUserLocation()" type="button" title="Find events near your city">
+                <svg class="nav-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                <span id="userLocationText">{{ user_city or 'Find my city' }}</span>
+            </button>
+            {% endif %}
+        </div>
+
+        <!-- Center: Primary Navigation Pills -->
+        <nav class="nav-center" aria-label="Main navigation">
+            <div class="nav-pills-wrap">
+                <a href="/#events" class="nav-link{% if active_nav == 'discover' %} active{% endif %}"{% if active_nav == 'discover' %} aria-current="page"{% endif %}>
+                    <svg class="nav-pill-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                    <span>Discover</span>
+                </a>
+
+                <a href="/movies" class="nav-link{% if active_nav == 'movies' %} active{% endif %}"{% if active_nav == 'movies' %} aria-current="page"{% endif %}>
+                    <svg class="nav-pill-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
+                    <span>Movies</span>
+                </a>
+
+                <a href="/#events" class="nav-link" id="calendarNavLink">
+                    <svg class="nav-pill-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    <span>Calendar</span>
+                </a>
+
+                <a href="javascript:void(0)" onclick="handleHostEventNav()" class="nav-link highlight">
+                    <span class="host-plus">+</span>
+                    <span>Host Event</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Right: Actions, Theme & User Dropdown -->
         <div class="nav-right">
-            <button id="siteThemeToggle" class="theme-btn" type="button" aria-label="Switch to light mode">
+            <!-- Theme Toggle Button -->
+            <button id="siteThemeToggle" class="theme-btn" type="button" aria-label="Switch theme" title="Toggle Light/Dark Theme">
                 <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
                     <circle class="theme-icon-sun" cx="12" cy="12" r="3.5"></circle>
                     <path class="theme-icon-rays" d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path>
                     <path class="theme-icon-moon" d="M20.2 15.2A8.5 8.5 0 0 1 8.8 3.8 8.6 8.6 0 1 0 20.2 15.2Z"></path>
                 </svg>
             </button>
-            {% if show_home_actions and user_name %}
-            <details class="nav-account-menu">
-                <summary class="nav-account-trigger">
-                    <span class="nav-account-avatar" aria-hidden="true">✦</span>
-                    <span>My Gatherly</span>
-                    <span class="nav-account-chevron" aria-hidden="true">⌄</span>
-                    <span class="nav-total-badge" id="navTotalBadge" hidden></span>
-                </summary>
 
-                <div class="nav-account-dropdown">
-                    <div class="nav-dropdown-heading">
-                        <span class="nav-dropdown-eyebrow">YOUR SPACE</span>
-                        <strong>Everything in one place.</strong>
-                    </div>
-
-                    <button type="button" class="nav-dropdown-item"
-                            onclick="openInvitations()">
-                        <span class="nav-item-icon">✉</span>
-                        <span class="nav-item-copy">
-                            <strong>Invitations</strong>
-                            <small>Events and collaborations</small>
-                        </span>
-                        <span id="invitePendingCount"
-                            class="notification-count hidden"></span>
-                    </button>
-
-                    <button type="button" class="nav-dropdown-item"
-                            onclick="openEventUpdates()">
-                        <span class="nav-item-icon">↗</span>
-                        <span class="nav-item-copy">
-                            <strong>Event updates</strong>
-                            <small>News from your event hosts</small>
-                        </span>
-                        <span id="eventUpdateCount"
-                            class="notification-count hidden"></span>
-                    </button>
-
-                    <button type="button" class="nav-dropdown-item"
-                            onclick="openWishlist()">
-                        <span class="nav-item-icon">♡</span>
-                        <span class="nav-item-copy">
-                            <strong>Wishlist</strong>
-                            <small>Experiences you've saved</small>
-                        </span>
-                    </button>
-
-                    <button type="button" class="nav-dropdown-item"
-                            onclick="openPasses()">
-                        <span class="nav-item-icon">▤</span>
-                        <span class="nav-item-copy">
-                            <strong>My passes</strong>
-                            <small>Your event bookings</small>
-                        </span>
-                    </button>
-                </div>
-            </details>
-            {% endif %}
+            <!-- GATE SCANNER MODE -->
             {% if gate_mode %}
                 {% if gate %}
                 <span class="welcome-user">Gate: <strong>{{ gate['display_name'] }}</strong></span>
                 <button id="gateSignOut" class="btn-primary btn-logout" type="button">SIGN OUT</button>
                 {% else %}
-                <span class="gate-access-label">THEATRE & EVENT STAFF ACCESS</span>
+                <span class="gate-access-label">STAFF ACCESS</span>
                 {% endif %}
-            {% elif user_name or user_id %}
-            {% if user_name %}<span class="welcome-user">Hi, <strong>{{ user_name }}</strong></span>{% endif %}
-            <button class="btn-primary btn-logout" type="button" data-site-signout>SIGN OUT</button>
+
+            <!-- LOGGED IN USER DROPDOWN (Global across all pages) -->
+            {% elif is_signed_in %}
+            <details class="nav-account-menu nav-user-menu" id="navUserMenu">
+                <summary class="nav-account-trigger" aria-label="Open user menu">
+                    <span class="nav-account-avatar" aria-hidden="true">{{ current_user_name[:1]|upper if current_user_name else '✦' }}</span>
+                    <span class="nav-user-label">{{ current_user_name.split()[0] if current_user_name else 'Account' }}</span>
+                    {% if current_account_type in ('THEATRE', 'ADMIN', 'ORGANIZER') %}
+                    <span class="nav-badge-pill badge-{{ current_account_type|lower }}">{{ current_account_type }}</span>
+                    {% endif %}
+                    <svg class="nav-account-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <span class="nav-total-badge" id="navTotalBadge" hidden></span>
+                </summary>
+
+                <div class="nav-account-dropdown">
+                    <!-- User Header -->
+                    <div class="nav-dropdown-heading">
+                        <div class="dropdown-user-avatar">{{ current_user_name[:1]|upper if current_user_name else '✦' }}</div>
+                        <div class="dropdown-user-meta">
+                            <span class="nav-dropdown-eyebrow">{{ current_account_type }} ACCOUNT</span>
+                            <strong>{{ current_user_name or 'Gatherly Member' }}</strong>
+                            <small class="dropdown-email">{{ session.get('user_email') or 'Signed in' }}</small>
+                        </div>
+                    </div>
+
+                    <!-- Category: Passes & Saved -->
+                    <div class="dropdown-section-tag">MY TICKETS & ACTIVITY</div>
+
+                    <button type="button" class="nav-dropdown-item" onclick="handleNavAction('passes')">
+                        <span class="nav-item-icon">🎟</span>
+                        <span class="nav-item-copy">
+                            <strong>My Event Passes</strong>
+                            <small>View active & past QR passes</small>
+                        </span>
+                    </button>
+
+                    <a href="/movies/tickets" class="nav-dropdown-item link-item">
+                        <span class="nav-item-icon">🎬</span>
+                        <span class="nav-item-copy">
+                            <strong>Movie Tickets</strong>
+                            <small>Cinema reservations & QR passes</small>
+                        </span>
+                    </a>
+
+                    <button type="button" class="nav-dropdown-item" onclick="handleNavAction('invitations')">
+                        <span class="nav-item-icon">✉</span>
+                        <span class="nav-item-copy">
+                            <strong>Invitations</strong>
+                            <small>Events and collaborations</small>
+                        </span>
+                        <span id="invitePendingCount" class="notification-count hidden"></span>
+                    </button>
+
+                    <button type="button" class="nav-dropdown-item" onclick="handleNavAction('updates')">
+                        <span class="nav-item-icon">📢</span>
+                        <span class="nav-item-copy">
+                            <strong>Event Updates</strong>
+                            <small>News from your event hosts</small>
+                        </span>
+                        <span id="eventUpdateCount" class="notification-count hidden"></span>
+                    </button>
+
+                    <button type="button" class="nav-dropdown-item" onclick="handleNavAction('wishlist')">
+                        <span class="nav-item-icon">♡</span>
+                        <span class="nav-item-copy">
+                            <strong>Saved Wishlist</strong>
+                            <small>Experiences you've bookmarked</small>
+                        </span>
+                    </button>
+
+                    <!-- Category: Management & Creator tools -->
+                    <div class="dropdown-section-tag">MANAGEMENT & CREATION</div>
+
+                    <a href="/host/dashboard" class="nav-dropdown-item link-item">
+                        <span class="nav-item-icon">🎪</span>
+                        <span class="nav-item-copy">
+                            <strong>Host Dashboard</strong>
+                            <small>Manage hosted events & attendees</small>
+                        </span>
+                    </a>
+
+                    {% if current_account_type == 'THEATRE' %}
+                    <a href="/movies/manage" class="nav-dropdown-item link-item highlight-item">
+                        <span class="nav-item-icon">🎭</span>
+                        <span class="nav-item-copy">
+                            <strong>Theatre Studio</strong>
+                            <small>Manage showtimes & seat reservations</small>
+                        </span>
+                    </a>
+                    {% elif current_account_type == 'ADMIN' %}
+                    <a href="/super-admin" class="nav-dropdown-item link-item highlight-item">
+                        <span class="nav-item-icon">⚡</span>
+                        <span class="nav-item-copy">
+                            <strong>Super Admin Console</strong>
+                            <small>System analytics & verification</small>
+                        </span>
+                    </a>
+                    {% endif %}
+
+                    <!-- Category: Account & Signout -->
+                    <div class="dropdown-section-tag">ACCOUNT</div>
+
+                    <a href="/account" class="nav-dropdown-item link-item">
+                        <span class="nav-item-icon">⚙</span>
+                        <span class="nav-item-copy">
+                            <strong>Account Settings</strong>
+                            <small>Profile, security & preferences</small>
+                        </span>
+                    </a>
+
+                    <button type="button" class="nav-dropdown-item signout-item" data-site-signout>
+                        <span class="nav-item-icon signout-icon">🚪</span>
+                        <span class="nav-item-copy">
+                            <strong>Sign Out</strong>
+                            <small>End your active session</small>
+                        </span>
+                    </button>
+                </div>
+            </details>
+
+            <!-- GUEST / SIGNED OUT -->
             {% else %}
-            <a class="btn-primary" href="/?auth=login{% if login_next %}&amp;next={{ login_next|urlencode }}{% endif %}">SIGN IN</a>
+            <a class="btn-primary nav-signin-btn" href="/?auth=login{% if login_next %}&amp;next={{ login_next|urlencode }}{% endif %}">
+                <span>SIGN IN</span>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </a>
+            {% endif %}
+
+            <!-- Mobile Hamburger Toggle Button -->
+            <button
+                class="nav-mobile-toggle"
+                id="navMobileToggle"
+                type="button"
+                aria-label="Open navigation menu"
+                aria-expanded="false"
+                aria-controls="navMobileContent">
+                <span class="bar bar-1"></span>
+                <span class="bar bar-2"></span>
+                <span class="bar bar-3"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Mobile Drawer Content -->
+    <div class="nav-mobile-content" id="navMobileContent">
+        <div class="mobile-drawer-body">
+            {% if is_signed_in %}
+            <div class="mobile-profile-card">
+                <div class="dropdown-user-avatar">{{ current_user_name[:1]|upper if current_user_name else '✦' }}</div>
+                <div class="mobile-profile-meta">
+                    <strong>{{ current_user_name }}</strong>
+                    <small>{{ session.get('user_email') or current_account_type ~ ' ACCOUNT' }}</small>
+                </div>
+                {% if current_account_type in ('THEATRE', 'ADMIN', 'ORGANIZER') %}
+                <span class="nav-badge-pill badge-{{ current_account_type|lower }}">{{ current_account_type }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="mobile-group-label">EXPLORE</div>
+            <a href="/#events" class="mobile-nav-link{% if active_nav == 'discover' %} active{% endif %}">
+                <span>Discover Events</span>
+            </a>
+            <a href="/movies" class="mobile-nav-link{% if active_nav == 'movies' %} active{% endif %}">
+                <span>Movies & Cinema</span>
+            </a>
+            <a href="/#events" class="mobile-nav-link" id="mobileCalendarLink">
+                <span>Calendar Schedule</span>
+            </a>
+            <a href="javascript:void(0)" onclick="handleHostEventNav()" class="mobile-nav-link mobile-host-link">
+                <span>+ Host An Event</span>
+            </a>
+
+            {% if is_signed_in %}
+            <div class="mobile-group-label">MY TICKETS & ACTIVITY</div>
+            <button type="button" class="mobile-nav-link" onclick="handleNavAction('passes')">
+                <span>My Event Passes</span>
+            </button>
+            <a href="/movies/tickets" class="mobile-nav-link{% if active_nav == 'movie-tickets' %} active{% endif %}">
+                <span>Movie Tickets</span>
+            </a>
+            <button type="button" class="mobile-nav-link" onclick="handleNavAction('invitations')">
+                <span>Invitations</span>
+                <span id="mobileInvitePendingCount" class="notification-count hidden"></span>
+            </button>
+            <button type="button" class="mobile-nav-link" onclick="handleNavAction('updates')">
+                <span>Event Updates</span>
+                <span id="mobileEventUpdateCount" class="notification-count hidden"></span>
+            </button>
+            <button type="button" class="mobile-nav-link" onclick="handleNavAction('wishlist')">
+                <span>Saved Wishlist</span>
+            </button>
+
+            <div class="mobile-group-label">MANAGEMENT & SETTINGS</div>
+            <a href="/host/dashboard" class="mobile-nav-link{% if active_nav == 'events' %} active{% endif %}">
+                <span>Host Dashboard</span>
+            </a>
+            {% if current_account_type == 'THEATRE' %}
+            <a href="/movies/manage" class="mobile-nav-link{% if active_nav == 'theatre' %} active{% endif %}">
+                <span>Theatre Studio</span>
+            </a>
+            {% elif current_account_type == 'ADMIN' %}
+            <a href="/super-admin" class="mobile-nav-link{% if active_nav == 'admin' %} active{% endif %}">
+                <span>Admin Console</span>
+            </a>
+            {% endif %}
+            <a href="/account" class="mobile-nav-link{% if active_nav == 'account' %} active{% endif %}">
+                <span>Account Settings</span>
+            </a>
+
+            <div class="mobile-drawer-footer">
+                <button type="button" class="btn-primary btn-logout mobile-signout-btn" data-site-signout>SIGN OUT</button>
+            </div>
+            {% else %}
+            <div class="mobile-drawer-footer">
+                <a class="btn-primary mobile-signin-btn" href="/?auth=login{% if login_next %}&amp;next={{ login_next|urlencode }}{% endif %}">SIGN IN TO GATHERLY</a>
+            </div>
             {% endif %}
         </div>
-        
+    </div>
 </header>
 <script src="{{ url_for('static', filename='js/site-navbar.js') }}"></script>

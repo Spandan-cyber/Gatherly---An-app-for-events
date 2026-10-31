@@ -32,94 +32,207 @@ window.formatGatherlyDate = formatGatherlyDate;
 window.formatGatherlyTime = formatGatherlyTime;
 window.formatGatherlyDateTime = formatGatherlyDateTime;
 
+// Global Navigation Actions (Works from any page on the site)
+function handleHostEventNav() {
+    if (typeof window.openCreateEventModal === 'function') {
+        window.openCreateEventModal();
+    } else {
+        window.location.href = '/?create=1';
+    }
+}
+
+function handleNavAction(action) {
+    // Close user dropdown if open
+    const userMenu = document.getElementById('navUserMenu') || document.querySelector('.nav-account-menu');
+    if (userMenu) userMenu.removeAttribute('open');
+
+    // Close mobile drawer if open
+    const mobileContent = document.getElementById('navMobileContent');
+    const mobileToggle = document.getElementById('navMobileToggle');
+    if (mobileContent) mobileContent.classList.remove('is-open');
+    if (mobileToggle) {
+        mobileToggle.setAttribute('aria-expanded', 'false');
+        mobileToggle.setAttribute('aria-label', 'Open navigation menu');
+    }
+
+    if (action === 'passes') {
+        if (typeof window.openPasses === 'function') {
+            window.openPasses();
+        } else {
+            window.location.href = '/?passes=1';
+        }
+    } else if (action === 'invitations') {
+        if (typeof window.openInvitations === 'function') {
+            window.openInvitations();
+        } else {
+            window.location.href = '/account#invitations';
+        }
+    } else if (action === 'updates') {
+        if (typeof window.openEventUpdates === 'function') {
+            window.openEventUpdates();
+        } else {
+            window.location.href = '/account#updates';
+        }
+    } else if (action === 'wishlist') {
+        if (typeof window.openWishlist === 'function') {
+            window.openWishlist();
+        } else {
+            window.location.href = '/?wishlist=1';
+        }
+    }
+}
+
+window.handleHostEventNav = handleHostEventNav;
+window.handleNavAction = handleNavAction;
+
 document.addEventListener('DOMContentLoaded', () => {
+    // 1. Mobile navigation drawer toggle
+    const mobileToggle = document.getElementById('navMobileToggle');
+    const mobileContent = document.getElementById('navMobileContent');
 
-        // Mobile navigation toggle
-        const mobileToggle = document.getElementById('navMobileToggle');
-        const mobileContent = document.getElementById('navMobileContent');
+    mobileToggle?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = mobileToggle.getAttribute('aria-expanded') === 'true';
 
-        mobileToggle?.addEventListener('click', () => {
-            const isOpen = mobileToggle.getAttribute('aria-expanded') === 'true';
+        mobileToggle.setAttribute('aria-expanded', String(!isOpen));
+        mobileToggle.setAttribute(
+            'aria-label',
+            isOpen ? 'Open navigation menu' : 'Close navigation menu'
+        );
 
-            mobileToggle.setAttribute('aria-expanded', String(!isOpen));
-            mobileToggle.setAttribute(
-                'aria-label',
-                isOpen ? 'Open navigation menu' : 'Close navigation menu'
-            );
+        mobileContent?.classList.toggle('is-open', !isOpen);
+    });
 
-            mobileContent?.classList.toggle('is-open', !isOpen);
+    // Mobile calendar link handling
+    document.getElementById('mobileCalendarLink')?.addEventListener('click', () => {
+        const desktopCalendar = document.getElementById('calendarNavLink');
+        if (desktopCalendar && typeof desktopCalendar.click === 'function') {
+            desktopCalendar.click();
+        }
+    });
+
+    // Close the mobile menu after clicking any link inside it
+    mobileContent?.querySelectorAll('a, button').forEach(item => {
+        item.addEventListener('click', () => {
+            mobileContent.classList.remove('is-open');
+            mobileToggle?.setAttribute('aria-expanded', 'false');
+            mobileToggle?.setAttribute('aria-label', 'Open navigation menu');
         });
-        //Notification Badge for My Gatherly
-            const navTotalBadge = document.getElementById('navTotalBadge');
-            const inviteCount = document.getElementById('invitePendingCount');
-            const updateCount = document.getElementById('eventUpdateCount');
+    });
 
-            function updateNavTotalBadge() {
-                if (!navTotalBadge) return;
+    // 2. Notification Badges Synchronization
+    const navTotalBadge = document.getElementById('navTotalBadge');
+    const inviteCount = document.getElementById('invitePendingCount');
+    const updateCount = document.getElementById('eventUpdateCount');
+    const mobileInviteCount = document.getElementById('mobileInvitePendingCount');
+    const mobileUpdateCount = document.getElementById('mobileEventUpdateCount');
 
-                const countValue = element => {
-                    if (!element || element.classList.contains('hidden')) {
-                        return 0;
+    function updateNavTotalBadge() {
+        if (!navTotalBadge) return;
+
+        const countValue = element => {
+            if (!element || element.classList.contains('hidden')) {
+                return 0;
+            }
+            return Number.parseInt(element.textContent.trim(), 10) || 0;
+        };
+
+        const total = countValue(inviteCount) + countValue(updateCount);
+
+        navTotalBadge.hidden = total === 0;
+        navTotalBadge.textContent = total > 99 ? '99+' : String(total);
+
+        // Sync with mobile badges
+        if (mobileInviteCount && inviteCount) {
+            mobileInviteCount.textContent = inviteCount.textContent;
+            mobileInviteCount.className = inviteCount.className;
+        }
+        if (mobileUpdateCount && updateCount) {
+            mobileUpdateCount.textContent = updateCount.textContent;
+            mobileUpdateCount.className = updateCount.className;
+        }
+    }
+
+    updateNavTotalBadge();
+
+    [inviteCount, updateCount].forEach(element => {
+        if (!element) return;
+        new MutationObserver(updateNavTotalBadge).observe(element, {
+            childList: true,
+            characterData: true,
+            attributes: true,
+            subtree: true
+        });
+    });
+
+    // 3. Proactive background badge fetch on secondary pages if not already fetched
+    const isUserMenuPresent = document.querySelector('.nav-user-menu, .nav-account-menu');
+    if (isUserMenuPresent && (!inviteCount || !inviteCount.textContent.trim())) {
+        fetch('/api/invitations')
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success && Array.isArray(data.invitations)) {
+                    const pending = data.invitations.filter(item => item.status === 'PENDING').length;
+                    if (inviteCount) {
+                        inviteCount.textContent = String(pending);
+                        inviteCount.classList.toggle('hidden', pending === 0);
                     }
+                    updateNavTotalBadge();
+                }
+            })
+            .catch(() => {});
 
-                    return Number.parseInt(element.textContent.trim(), 10) || 0;
-                };
+        fetch('/api/my/notifications')
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success && Array.isArray(data.notifications)) {
+                    const unread = data.notifications.filter(item => !item.is_read).length;
+                    if (updateCount) {
+                        updateCount.textContent = String(unread);
+                        updateCount.classList.toggle('hidden', unread === 0);
+                    }
+                    updateNavTotalBadge();
+                }
+            })
+            .catch(() => {});
+    }
 
-                const total = countValue(inviteCount) + countValue(updateCount);
+    // 4. Close User Dropdown and Mobile Drawer when clicking outside
+    const userMenu = document.querySelector('.nav-account-menu, .nav-user-menu');
 
-                navTotalBadge.hidden = total === 0;
-                navTotalBadge.textContent = total > 99 ? '99+' : String(total);
-            }
+    document.addEventListener('click', event => {
+        if (userMenu && !userMenu.contains(event.target)) {
+            userMenu.removeAttribute('open');
+        }
+        if (mobileContent && mobileToggle && !mobileContent.contains(event.target) && !mobileToggle.contains(event.target)) {
+            mobileContent.classList.remove('is-open');
+            mobileToggle.setAttribute('aria-expanded', 'false');
+            mobileToggle.setAttribute('aria-label', 'Open navigation menu');
+        }
+    });
 
-            updateNavTotalBadge();
+    // Close with Escape key
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            userMenu?.removeAttribute('open');
+            mobileContent?.classList.remove('is-open');
+            mobileToggle?.setAttribute('aria-expanded', 'false');
+            mobileToggle?.setAttribute('aria-label', 'Open navigation menu');
+        }
+    });
 
-            [inviteCount, updateCount].forEach(element => {
-                if (!element) return;
-
-                new MutationObserver(updateNavTotalBadge).observe(element, {
-                    childList: true,
-                    characterData: true,
-                    attributes: true,
-                    subtree: true
-                });
-            });
-
-        // Close the mobile menu after a navigation link is selected.
-        mobileContent?.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', () => {
-                mobileContent.classList.remove('is-open');
-                mobileToggle?.setAttribute('aria-expanded', 'false');
-                mobileToggle?.setAttribute('aria-label', 'Open navigation menu');
-            });
-        });
-
-        // Close the My Gatherly dropdown when clicking outside.
-        const accountMenu = document.querySelector('.nav-account-menu');
-
-        document.addEventListener('click', event => {
-            if (accountMenu && !accountMenu.contains(event.target)) {
-                accountMenu.removeAttribute('open');
-            }
-        });
-
-        // Close dropdowns with Escape.
-        document.addEventListener('keydown', event => {
-            if (event.key === 'Escape') {
-                accountMenu?.removeAttribute('open');
-
-                mobileContent?.classList.remove('is-open');
-                mobileToggle?.setAttribute('aria-expanded', 'false');
-                mobileToggle?.setAttribute('aria-label', 'Open navigation menu');
-            }
-        });
+    // 5. Date & Time formatting helpers
     document.querySelectorAll('[data-gatherly-date][data-gatherly-time]').forEach(element => {
         element.textContent = `${formatGatherlyDate(element.dataset.gatherlyDate)} · ${formatGatherlyTime(element.dataset.gatherlyTime)}`;
     });
 
+    // 6. Theme Toggle (Sun/Moon with smooth transitions)
     const root = document.documentElement;
     const toggle = document.getElementById('siteThemeToggle');
     const savedTheme = localStorage.getItem('gatherly-theme');
-    if (savedTheme === 'light' || savedTheme === 'dark') root.dataset.theme = savedTheme;
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+        root.dataset.theme = savedTheme;
+    }
 
     const updateThemeLabel = () => {
         if (!toggle) return;
@@ -135,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateThemeLabel();
     });
 
+    // 7. Global Sign-out Handler
     document.addEventListener('click', async event => {
         const button = event.target.closest('[data-site-signout]');
         if (!button) return;
