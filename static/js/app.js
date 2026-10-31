@@ -1506,7 +1506,7 @@ async function handleSignup(event) {
     pendingAuthEmail = data.email;
     pendingAuthPurpose = 'signup_verification';
     document.getElementById('verifyEmailLabel').textContent = pendingAuthEmail;
-    document.getElementById('authOtp').value = data.demo_otp || '';
+    document.getElementById('authOtp').value = '';
     switchAuthView('verify');
     showAuthMessage(data.message, 'success');
 }
@@ -1546,9 +1546,7 @@ async function handleRequestReset(event) {
     if(data) {
         document.getElementById('resetRequestForm').classList.add('hidden');
         document.getElementById('resetConfirmForm').classList.remove('hidden');
-        if (data.demo_otp) {
-            document.getElementById('resetOtp').value = data.demo_otp;
-        }
+        document.getElementById('resetOtp').value = '';
         showAuthMessage(data.message, 'success');
     }
 }

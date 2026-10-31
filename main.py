@@ -364,6 +364,14 @@ def send_via_resend(api_key, receiver_email, subject, body_text, html_content=No
         with urlopen(req, timeout=10) as resp:
             app.logger.info("Email delivered via Resend HTTPS API (Port 443) to %s", receiver_email)
             return resp.status in (200, 201)
+    except HTTPError as e:
+        err_msg = ""
+        try:
+            err_msg = e.read().decode("utf-8")
+        except Exception:
+            pass
+        app.logger.warning("Resend HTTPS API returned status %s: %s", e.code, err_msg)
+        return False
     except Exception as e:
         app.logger.warning("Resend HTTPS API delivery error: %s", e)
         return False
@@ -392,8 +400,6 @@ def send_email_with_qr(
         app.logger.error(
             "Email not sent: Neither RESEND_API_KEY nor SMTP credentials configured."
         )
-        if "code is:" in body_text or "verification" in subject.lower() or "reset" in subject.lower():
-            app.logger.warning("DEMO OTP LOG [%s]: %s", receiver_email, body_text.replace("\n", " "))
         if required:
             return False
         return True
@@ -448,12 +454,6 @@ def send_email_with_qr(
 
     except Exception as e:
         app.logger.exception("Email delivery failed for %s: %s", receiver_email, e)
-        app.logger.warning("=================================================================")
-        app.logger.warning("RENDER FREE TIER NOTICE: Outbound SMTP ports 587/465 are blocked by Render firewall.")
-        app.logger.warning("RECIPIENT: %s | SUBJECT: %s", receiver_email, subject)
-        app.logger.warning("BODY / CODE: %s", body_text.replace("\n", " "))
-        app.logger.warning("SOLUTION: Set RESEND_API_KEY in Render dashboard to send via HTTPS Port 443.")
-        app.logger.warning("=================================================================")
         return False
 
 def send_email_async(receiver_email, subject, body_text, qr_img_bytes=None):
@@ -1258,14 +1258,12 @@ def signup():
             )
 
     if not send_auth_otp(email, otp, "signup_verification"):
-        app.logger.warning("RENDER SMTP BLOCKED: Providing signup OTP fallback for %s: %s", email, otp)
-        return jsonify({
-            "success": True,
-            "requires_otp": True,
-            "email": email,
-            "message": f"Render free tier blocked SMTP ports. Your verification code is: {otp} (or set RESEND_API_KEY).",
-            "demo_otp": otp
-        })
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE otps SET is_used = 1 WHERE email = ? AND purpose = 'signup_verification' AND is_used = 0",
+                (email,)
+            )
+        return jsonify({"success": False, "message": "Could not send verification email. Please check your email address and mail settings."}), 503
 
     return jsonify({"success": True, "requires_otp": True, "email": email,
                     "message": "Verification code sent to your email"})
@@ -1549,12 +1547,12 @@ def request_password_reset():
             return jsonify({"success": False, "message": "Please wait before requesting another code"}), 429
 
     if not send_auth_otp(email, otp, "reset_password"):
-        app.logger.warning("RENDER SMTP BLOCKED: Providing reset OTP fallback for %s: %s", email, otp)
-        return jsonify({
-            "success": True,
-            "message": f"Render free tier blocked SMTP ports. Your password reset code is: {otp} (or set RESEND_API_KEY).",
-            "demo_otp": otp
-        })
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE otps SET is_used = 1 WHERE email = ? AND purpose = 'reset_password' AND is_used = 0",
+                (email,)
+            )
+        return jsonify({"success": False, "message": "Could not send password reset email. Please try again later."}), 503
     return jsonify({"success": True, "message": "Reset code sent to your email"})
 
 @app.route('/api/reset-password', methods=['POST'])
@@ -1733,12 +1731,15 @@ def request_account_deletion():
     if otp is None:
         return jsonify({"success": False, "message": "Please wait before requesting another code"}), 429
     if not send_auth_otp(email, otp, "delete_account"):
-        app.logger.warning("RENDER SMTP BLOCKED: Providing delete OTP fallback for %s: %s", email, otp)
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE otps SET is_used = 1 WHERE email = ? AND purpose = 'delete_account' AND is_used = 0",
+                (email,)
+            )
         return jsonify({
-            "success": True,
-            "message": f"Render free tier blocked SMTP ports. Your deletion code is: {otp} (or set RESEND_API_KEY).",
-            "demo_otp": otp
-        })
+            "success": False,
+            "message": "Could not send verification email. Please try again later."
+        }), 503
     return jsonify({"success": True, "message": f"Deletion code sent to {email}"})
 
 @app.route('/api/account/delete/confirm', methods=['POST'])
