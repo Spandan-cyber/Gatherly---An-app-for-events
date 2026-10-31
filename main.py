@@ -11,7 +11,7 @@ import time
 from contextlib import contextmanager
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta
-from threading import Lock
+from threading import Lock, Thread
 from urllib.parse import quote, urlsplit
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -228,6 +228,112 @@ def public_base_url():
         pass
     return None
 
+def get_smtp_config():
+    sender_email = (
+        os.getenv("GMAIL_USER")
+        or os.getenv("SMTP_USER")
+        or os.getenv("EMAIL_USER")
+        or os.getenv("MAIL_USERNAME")
+        or os.getenv("SMTP_EMAIL")
+        or ""
+    ).strip()
+
+    app_password = (
+        os.getenv("GMAIL_APP_PASSWORD")
+        or os.getenv("GMAIL_PASSWORD")
+        or os.getenv("SMTP_PASSWORD")
+        or os.getenv("SMTP_PASS")
+        or os.getenv("EMAIL_PASSWORD")
+        or os.getenv("MAIL_PASSWORD")
+        or ""
+    ).strip().replace(" ", "")
+
+    host = (
+        os.getenv("SMTP_HOST")
+        or os.getenv("MAIL_SERVER")
+        or "smtp.gmail.com"
+    ).strip()
+
+    port_env = (os.getenv("SMTP_PORT") or os.getenv("MAIL_PORT") or "").strip()
+    port = int(port_env) if port_env.isdigit() else None
+
+    sender_name = (os.getenv("SMTP_FROM_NAME") or "Gatherly Events").strip()
+    from_header = f"{sender_name} <{sender_email}>" if sender_email else "Gatherly Events"
+
+    return {
+        "user": sender_email,
+        "password": app_password,
+        "host": host,
+        "port": port,
+        "from_header": from_header
+    }
+
+def build_gatherly_email_html(subject, body_text, has_qr=False):
+    escaped_body = (
+        body_text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    paragraphs = [p for p in escaped_body.split("\n\n") if p.strip()]
+    html_paragraphs = "".join(
+        f"<p style='margin:0 0 14px 0;line-height:1.6;color:#e2e8f0;font-size:15px;'>{p.replace(chr(10), '<br>')}</p>"
+        for p in paragraphs
+    )
+
+    qr_section = ""
+    if has_qr:
+        qr_section = """
+        <div style="text-align:center;margin:28px 0;padding:24px 20px;background:#18221e;border-radius:12px;border:1px solid #273730;">
+            <p style="margin:0 0 12px 0;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#a3e635;font-weight:700;">YOUR ADMISSION QR PASS</p>
+            <img src="cid:ticket_qr" alt="Gatherly Ticket QR Code" style="max-width:210px;height:auto;border-radius:10px;background:#ffffff;padding:12px;display:inline-block;box-shadow:0 8px 24px rgba(0,0,0,0.4);" />
+            <p style="margin:12px 0 0 0;font-size:12px;color:#94a3b8;">Present this pass at the gate or check-in desk for entry.</p>
+        </div>
+        """
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{subject}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#090d0b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#f8fafc;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#090d0b;padding:32px 16px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" style="max-width:560px;background-color:#111915;border-radius:16px;border:1px solid #23312a;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.6);" cellspacing="0" cellpadding="0">
+                    <tr>
+                        <td style="padding:28px 32px;background:linear-gradient(135deg, #18261f 0%, #111915 100%);border-bottom:1px solid #23312a;">
+                            <span style="display:inline-block;width:32px;height:32px;line-height:32px;text-align:center;background:#a3e635;color:#0a120c;font-weight:900;border-radius:8px;font-size:16px;margin-right:10px;vertical-align:middle;">G</span>
+                            <span style="font-size:20px;font-weight:800;letter-spacing:1px;color:#ffffff;vertical-align:middle;">GATHERLY<span style="color:#a3e635;">.</span></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:32px;">
+                            <h1 style="margin:0 0 20px 0;font-size:20px;font-weight:700;color:#ffffff;line-height:1.4;">{subject}</h1>
+                            <div style="color:#cbd5e1;">
+                                {html_paragraphs}
+                            </div>
+                            {qr_section}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px;background-color:#0c120e;border-top:1px solid #1e2b24;text-align:center;">
+                            <p style="margin:0 0 6px 0;font-size:12px;color:#64748b;">
+                                Gatherly · Experiences, Cinema &amp; Live Events
+                            </p>
+                            <p style="margin:0;font-size:11px;color:#475569;">
+                                If you did not make this request or purchase, please reach out to support.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+
 def send_email_with_qr(
     receiver_email,
     subject,
@@ -235,72 +341,86 @@ def send_email_with_qr(
     qr_img_bytes=None,
     required=False
 ):
-    sender_email = os.getenv("GMAIL_USER", "").strip()
-    app_password = (
-        os.getenv("GMAIL_APP_PASSWORD", "").strip().replace(" ", "")
-    )
+    cfg = get_smtp_config()
+    sender_email = cfg["user"]
+    app_password = cfg["password"]
 
     if not sender_email or not app_password:
         app.logger.error(
-            "Email not sent: GMAIL_USER or GMAIL_APP_PASSWORD is missing."
+            "Email not sent: SMTP credentials missing (set GMAIL_USER and GMAIL_APP_PASSWORD, or SMTP_USER and SMTP_PASSWORD)."
         )
-
+        if "code is:" in body_text or "verification" in subject.lower() or "reset" in subject.lower():
+            app.logger.warning("DEMO OTP LOG [%s]: %s", receiver_email, body_text.replace("\n", " "))
         if required:
             return False
-
         return True
 
-    msg = MIMEMultipart()
+    msg = MIMEMultipart("mixed")
     msg["Subject"] = subject
-    msg["From"] = f"Gatherly Events <{sender_email}>"
+    msg["From"] = cfg["from_header"]
     msg["To"] = receiver_email
-    msg.attach(MIMEText(body_text, "plain", "utf-8"))
 
-    # Attach a QR image only when one is provided.
-    # OTP emails do not need an attachment.
+    alt_part = MIMEMultipart("alternative")
+    alt_part.attach(MIMEText(body_text, "plain", "utf-8"))
+    html_content = build_gatherly_email_html(subject, body_text, has_qr=bool(qr_img_bytes))
+    alt_part.attach(MIMEText(html_content, "html", "utf-8"))
+    msg.attach(alt_part)
+
     if qr_img_bytes:
         img = MIMEImage(qr_img_bytes, _subtype="png")
-        img.add_header(
-            "Content-Disposition",
-            "attachment",
-            filename="ticket_qr.png"
-        )
+        img.add_header("Content-ID", "<ticket_qr>")
+        img.add_header("Content-Disposition", "inline", filename="ticket_qr.png")
         msg.attach(img)
 
-    # IMPORTANT: This try block must be OUTSIDE the QR-image condition.
-    # That way, emails without QR attachments are also sent.
+    host = cfg["host"]
+    port = cfg["port"]
+
     try:
-        with smtplib.SMTP(
-            "smtp.gmail.com",
-            587,
-            timeout=25
-        ) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
+        if port == 465:
+            with smtplib.SMTP_SSL(host, 465, timeout=10) as server:
+                server.login(sender_email, app_password)
+                server.send_message(msg)
+        elif port:
+            with smtplib.SMTP(host, port, timeout=10) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(sender_email, app_password)
+                server.send_message(msg)
+        else:
+            try:
+                with smtplib.SMTP(host, 587, timeout=8) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    server.login(sender_email, app_password)
+                    server.send_message(msg)
+            except Exception as e587:
+                app.logger.warning("SMTP Port 587 delivery failed (%s). Attempting Port 465 SSL fallback...", e587)
+                with smtplib.SMTP_SSL(host, 465, timeout=8) as server:
+                    server.login(sender_email, app_password)
+                    server.send_message(msg)
 
-            server.login(sender_email, app_password)
-            server.send_message(msg)
-
-        app.logger.info(
-            "Email sent successfully to %s",
-            receiver_email
-        )
+        app.logger.info("Email sent successfully to %s", receiver_email)
         return True
 
-    except (smtplib.SMTPException, OSError):
-        app.logger.exception(
-            "Email delivery failed for %s",
-            receiver_email
-        )
+    except Exception:
+        app.logger.exception("Email delivery failed for %s", receiver_email)
         return False
 
+def send_email_async(receiver_email, subject, body_text, qr_img_bytes=None):
+    thread = Thread(
+        target=send_email_with_qr,
+        args=(receiver_email, subject, body_text, qr_img_bytes, False),
+        daemon=True
+    )
+    thread.start()
+    return thread
+
 def send_event_announcement_emails(recipients, event_title, title, message, in_app_available=True):
-    if recipients and (
-        not os.getenv("GMAIL_USER", "").strip()
-        or not os.getenv("GMAIL_APP_PASSWORD", "").strip().replace(" ", "")
-    ):
-        app.logger.warning("Event email notifications skipped because Gmail SMTP credentials are missing")
+    cfg = get_smtp_config()
+    if recipients and (not cfg["user"] or not cfg["password"]):
+        app.logger.warning("Event email notifications skipped because SMTP credentials are missing")
         return 0
 
     sent = 0
@@ -316,9 +436,9 @@ def send_event_announcement_emails(recipients, event_title, title, message, in_a
         )
         if send_email_with_qr(
             recipient["email"],
-            "Gatherly event update",
+            f"Gatherly update: {event_title}",
             email_body,
-            required=True
+            required=False
         ):
             sent += 1
     return sent
@@ -781,6 +901,155 @@ def get_event_payload(conn, event, user_id=None):
         if path and not any(item["media_path"] == path for item in payload["media"]):
             payload["media"].insert(0, {"media_path": path, "media_type": media_type})
     return payload
+
+_public_events_cache = {"timestamp": 0, "events": []}
+
+def invalidate_events_cache():
+    global _public_events_cache
+    _public_events_cache = {"timestamp": 0, "events": []}
+
+def get_events_payload_bulk(conn, event_rows, user_id=None):
+    if not event_rows:
+        return []
+
+    event_ids = [e["id"] for e in event_rows]
+    organizer_ids = list({e["organizer_id"] for e in event_rows if e["organizer_id"]})
+    e_placeholders = ",".join("?" for _ in event_ids)
+
+    organizers = {}
+    if organizer_ids:
+        u_placeholders = ",".join("?" for _ in organizer_ids)
+        rows = conn.execute(
+            f"SELECT id, full_name, account_type, organization_name, is_verified FROM users WHERE id IN ({u_placeholders})",
+            tuple(organizer_ids)
+        ).fetchall()
+        organizers = {r["id"]: r for r in rows}
+
+    event_capacities = {}
+    cap_rows = conn.execute(
+        f"""SELECT event_id, COALESCE(SUM(quantity), 0) AS used
+            FROM bookings WHERE event_id IN ({e_placeholders}) AND status IN ('PENDING', 'CONFIRMED')
+            GROUP BY event_id""",
+        tuple(event_ids)
+    ).fetchall()
+    for r in cap_rows:
+        event_capacities[r["event_id"]] = r["used"]
+
+    wishlist_counts = {}
+    wl_rows = conn.execute(
+        f"SELECT event_id, COUNT(*) AS count FROM event_wishlists WHERE event_id IN ({e_placeholders}) GROUP BY event_id",
+        tuple(event_ids)
+    ).fetchall()
+    for r in wl_rows:
+        wishlist_counts[r["event_id"]] = r["count"]
+
+    user_wishlists = set()
+    user_managed_events = set()
+    if user_id:
+        user_wl_rows = conn.execute(
+            f"SELECT event_id FROM event_wishlists WHERE user_id = ? AND event_id IN ({e_placeholders})",
+            (user_id, *event_ids)
+        ).fetchall()
+        user_wishlists = {r["event_id"] for r in user_wl_rows}
+
+        mem_rows = conn.execute(
+            f"SELECT event_id FROM event_members WHERE user_id = ? AND status = 'ACTIVE' AND event_id IN ({e_placeholders})",
+            (user_id, *event_ids)
+        ).fetchall()
+        user_managed_events = {r["event_id"] for r in mem_rows}
+
+    tiers_by_event = {eid: [] for eid in event_ids}
+    all_tiers = conn.execute(
+        f"SELECT * FROM ticket_tiers WHERE event_id IN ({e_placeholders}) AND active = 1 ORDER BY sort_order, id",
+        tuple(event_ids)
+    ).fetchall()
+    tier_ids = [t["id"] for t in all_tiers]
+    tier_capacities = {}
+    if tier_ids:
+        t_placeholders = ",".join("?" for _ in tier_ids)
+        now_sec = datetime.now().isoformat(timespec="seconds")
+        t_cap_rows = conn.execute(
+            f"""SELECT tier_id, COALESCE(SUM(quantity), 0) AS used
+                FROM bookings WHERE tier_id IN ({t_placeholders}) AND status IN ('PENDING', 'CONFIRMED')
+                  AND (hold_expires_at IS NULL OR hold_expires_at > ?)
+                GROUP BY tier_id""",
+            (*tier_ids, now_sec)
+        ).fetchall()
+        for r in t_cap_rows:
+            tier_capacities[r["tier_id"]] = r["used"]
+
+    for t in all_tiers:
+        item = dict(t)
+        reserved = tier_capacities.get(t["id"], 0)
+        item["tickets_reserved"] = reserved
+        item["tickets_remaining"] = max(0, t["capacity"] - reserved)
+        tiers_by_event[t["event_id"]].append(item)
+
+    media_by_event = {eid: [] for eid in event_ids}
+    for m in conn.execute(
+        f"SELECT event_id, media_path, media_type FROM event_media WHERE event_id IN ({e_placeholders}) ORDER BY id",
+        tuple(event_ids)
+    ).fetchall():
+        media_by_event[m["event_id"]].append({"media_path": m["media_path"], "media_type": m["media_type"]})
+
+    partners_by_event = {eid: [] for eid in event_ids}
+    for p in conn.execute(
+        f"SELECT event_id, name, partner_type, logo_path FROM event_partners WHERE event_id IN ({e_placeholders}) ORDER BY sort_order, id",
+        tuple(event_ids)
+    ).fetchall():
+        partners_by_event[p["event_id"]].append({
+            "name": p["name"],
+            "partner_type": p["partner_type"],
+            "logo_path": p["logo_path"]
+        })
+
+    payloads = []
+    for event in event_rows:
+        payload = dict(event)
+        payload["public_id"] = event["public_id"]
+        payload["is_cancelled"] = bool(event["cancelled_at"])
+
+        organizer = organizers.get(event["organizer_id"])
+        if organizer:
+            payload["organizer_name"] = organizer["organization_name"] or organizer["full_name"]
+            payload["organizer_badge"] = (
+                "verified_organizer"
+                if organizer["account_type"] == "ORGANIZER" and organizer["is_verified"]
+                else None
+            )
+        else:
+            payload["organizer_name"] = ""
+            payload["organizer_badge"] = None
+
+        payload["ticket_limit"] = event["ticket_limit"]
+        payload["city"] = event["city"]
+        used = event_capacities.get(event["id"], 0)
+        payload["tickets_reserved"] = used
+        payload["tickets_remaining"] = max(0, event["ticket_limit"] - used) if event["ticket_limit"] is not None else None
+        payload["can_manage"] = bool(user_id and (event["organizer_id"] == user_id or event["id"] in user_managed_events))
+        payload["is_published"] = schedule_has_started(event["publish_at"])
+        payload["tickets_on_sale"] = not payload["is_cancelled"] and schedule_has_started(event["ticket_sales_start_at"])
+        payload["wishlist_count"] = wishlist_counts.get(event["id"], 0)
+        payload["is_wishlisted"] = bool(user_id and event["id"] in user_wishlists)
+        payload["tiers"] = tiers_by_event.get(event["id"], [])
+        payload["media"] = list(media_by_event.get(event["id"], []))
+        payload["partners"] = list(partners_by_event.get(event["id"], []))
+
+        if not payload["partners"] and (event["sponsor_name"] or event["sponsor_logo"]):
+            payload["partners"].append({
+                "name": event["sponsor_name"] or "",
+                "partner_type": "SPONSOR",
+                "logo_path": event["sponsor_logo"]
+            })
+
+        for key, media_type in (("main_image", "image"), ("cover_image", "image"), ("video_file", "video")):
+            path = event[key]
+            if path and not any(item["media_path"] == path for item in payload["media"]):
+                payload["media"].insert(0, {"media_path": path, "media_type": media_type})
+
+        payloads.append(payload)
+
+    return payloads
 
 def advance_waitlist(conn, event_id, tier_id=None):
     now = datetime.now()
@@ -1494,11 +1763,19 @@ def update_location():
 
 @app.route('/api/events', methods=['GET'])
 def get_events():
+    global _public_events_cache
     user_city = session.get('user_city', '').casefold()
+    user_id = current_user_id()
+    now_ts = time.time()
+
+    # Fast in-memory cache for public event discovery (15s TTL)
+    if not user_id and not user_city:
+        if now_ts - _public_events_cache["timestamp"] < 15 and _public_events_cache["events"]:
+            return jsonify({"success": True, "events": _public_events_cache["events"]})
+
     now = datetime.now().isoformat(timespec="minutes")
 
     with get_db() as conn:
-        user_id = current_user_id()
         if user_id:
             cursor = conn.execute(
                 """SELECT DISTINCT e.* FROM events e
@@ -1523,7 +1800,11 @@ def get_events():
                    AND (publish_at IS NULL OR publish_at <= ?) ORDER BY event_date ASC, event_time ASC""",
                 (now,)
             )
-        events = [get_event_payload(conn, row, user_id) for row in cursor.fetchall()]
+        event_rows = cursor.fetchall()
+        events = get_events_payload_bulk(conn, event_rows, user_id)
+
+    if not user_id and not user_city:
+        _public_events_cache = {"timestamp": now_ts, "events": events}
 
     if user_city:
         events.sort(key=lambda event: (event["city"].casefold() != user_city, event["event_date"], event["event_time"]))
@@ -2714,6 +2995,7 @@ def create_event():
                  tier["capacity"], image_path, index)
             )
 
+    invalidate_events_cache()
     return jsonify({"success": True, "event_id": event_id, "public_id": public_id})
 
 @app.route('/api/organizer/events', methods=['GET'])
@@ -3525,6 +3807,9 @@ def public_assistant_chat():
         "'Tickets starting from ₹X'. "
         "Never present the minimum price as the price of every ticket. "
         "If the price is unknown, say 'Price not available'. "
+        "If a user asks how to create, host, or publish an event on Gatherly, warmly guide them! "
+        "Tell them they can host an event anytime by clicking the '+ Host Event' button in the top navigation bar "
+        "or by visiting the Host Dashboard (/host/dashboard), which features an AI Event Assistant to help draft, configure, and publish their event in minutes. "
     )
 
     # Put the event data in the current prompt, not in the conversation history.
@@ -3668,30 +3953,60 @@ def normalize_ai_event_create(action):
 @app.route('/api/organizer/assistant/event-draft', methods=['POST'])
 def propose_ai_event_draft():
     user_id = current_user_id()
-    if not user_id:
-        return jsonify({"success": False, "message": "Sign in to create an event with the assistant"}), 401
-    data = request.get_json(silent=True)
-    prompt_value = data.get("prompt") if isinstance(data, dict) else None
+    rate_key = user_id or request.remote_addr or "anonymous"
+    data = request.get_json(silent=True) or {}
+    prompt_value = data.get("prompt")
     prompt = prompt_value.strip() if isinstance(prompt_value, str) else ""
     if not prompt or len(prompt) > 1200:
         return jsonify({"success": False, "message": "Enter a prompt of up to 1,200 characters"}), 400
     if not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
         return jsonify({"success": False, "message": "Gemini is not configured. Set GEMINI_API_KEY in the server environment."}), 503
-    if not consume_gemini_request(user_id):
+    if not consume_gemini_request(rate_key):
         return jsonify({"success": False, "message": "Assistant limit reached. Try again in an hour."}), 429
 
+    # Extract conversation history
+    raw_history = data.get("history")
+    sanitized_history = []
+    if isinstance(raw_history, list):
+        for item in raw_history[-12:]:
+            if isinstance(item, dict) and item.get("text"):
+                role = "user" if item.get("role") in ("user", "human") else "model"
+                sanitized_history.append({"role": role, "text": str(item["text"])[:900]})
+
+    # Extract accumulated draft state
+    raw_draft = data.get("draft_state") or {}
+    known = {}
+    if isinstance(raw_draft, dict):
+        for k in ("title", "category", "event_date", "event_time", "venue", "city", "description", "visibility", "is_paid", "ticket_price", "ticket_limit"):
+            val = raw_draft.get(k)
+            if val not in (None, ""):
+                known[k] = val
+
     system_instruction = (
-        "You draft one basic Gatherly event from the planner's request. Return JSON only with keys "
-        "reply (string) and actions (array of zero or one object). Only action type event_create is allowed, "
-        "with fields title, category, event_date (YYYY-MM-DD), event_time (HH:MM, 24-hour), venue, city, "
-        "description, visibility (PUBLIC or PRIVATE). Required details are event title, date, time, venue, "
-        "and city. If category is missing use Other; if description is missing use an empty string; if visibility "
-        "is missing use PUBLIC. Never invent missing required details; ask a concise question and return no "
-        "actions if any required detail is missing or ambiguous. "
-        "AI-created events are free with unlimited capacity; if the user requests paid ticket tiers, explain "
-        "that they must be configured after the event is created and do not assume prices. Do not create "
-        "announcements, invitations, payments, or external commitments."
+        "You are Gatherly's intelligent event creation assistant. "
+        "Your task is to help the organizer draft and configure their event through conversation. "
+        "CRITICAL MEMORY & RETENTION RULES: "
+        "1. ALWAYS remember and retain EVERY detail the organizer provided across the conversation "
+        "(such as event title, venue, city, date, time, category, visibility, price, capacity). "
+        "2. NEVER re-ask for details already provided in previous conversation turns or present in CURRENT KNOWN DRAFT. "
+        "If the organizer previously stated the event name and venue, NEVER ask for them again! "
+        "3. Required fields to complete an event are: title, event_date (YYYY-MM-DD), event_time (HH:MM, 24-hour), venue, and city. "
+        "4. If category is unspecified, infer a suitable category from Concert, Comedy, Festival, Meetup, or Other. "
+        "5. If visibility is unspecified, default to PUBLIC. "
+        "6. If the user mentions 'paid' or a price (e.g. ₹500 or 500 rupees), set is_paid: true and ticket_price: number. If 'free', set is_paid: false. "
+        "7. If description is missing, generate an engaging 1-2 sentence description. "
+        "8. In your JSON response, ALWAYS return: "
+        "- reply: a concise, friendly message acknowledging what you recorded and asking ONLY for details that are still missing. "
+        "- draft_state: an object containing ALL fields known so far (title, category, event_date, event_time, venue, city, description, visibility, is_paid, ticket_price, ticket_limit). Whenever the user provides or mentions dates (e.g. '31 December 2026' -> '2026-12-31'), times (e.g. '7PM' -> '19:00'), venues, or cities, you MUST convert and include them in draft_state! Retain ALL previously known fields! "
+        "- actions: an array. If title, event_date, event_time, venue, and city are all known or have been mentioned across the conversation, you MUST return one action of type 'event_create' with fields {title, category, event_date, event_time, venue, city, description, visibility}. If any of these 5 required fields is still missing, actions MUST be empty []."
     )
+
+    prompt_parts = []
+    if known:
+        prompt_parts.append(f"CURRENT KNOWN DRAFT: {json.dumps(known)}")
+    prompt_parts.append(f"Organizer message: {prompt}")
+    final_prompt = "\n\n".join(prompt_parts)
+
     event_fields_schema = {
         "type": "OBJECT",
         "properties": {
@@ -3713,6 +4028,22 @@ def propose_ai_event_draft():
         "type": "OBJECT",
         "properties": {
             "reply": {"type": "STRING"},
+            "draft_state": {
+                "type": "OBJECT",
+                "properties": {
+                    "title": {"type": "STRING"},
+                    "category": {"type": "STRING"},
+                    "event_date": {"type": "STRING"},
+                    "event_time": {"type": "STRING"},
+                    "venue": {"type": "STRING"},
+                    "city": {"type": "STRING"},
+                    "description": {"type": "STRING"},
+                    "visibility": {"type": "STRING", "enum": ["PUBLIC", "PRIVATE"]},
+                    "is_paid": {"type": "BOOLEAN"},
+                    "ticket_price": {"type": "NUMBER"},
+                    "ticket_limit": {"type": "INTEGER"}
+                }
+            },
             "actions": {
                 "type": "ARRAY",
                 "items": {
@@ -3725,35 +4056,54 @@ def propose_ai_event_draft():
                 }
             }
         },
-        "required": ["reply", "actions"]
+        "required": ["reply"]
     }
     try:
         raw = gemini_assistant_request(
-            f"Planner request: {prompt}",
+            final_prompt,
             system_instruction=system_instruction,
             response_schema=event_response_schema,
+            conversation_history=sanitized_history,
             max_output_tokens=900
         )
         answer = json.loads(raw)
-        if not isinstance(answer, dict) or not isinstance(answer.get("reply"), str) or not isinstance(answer.get("actions"), list) or len(answer["actions"]) > 1:
+        if not isinstance(answer, dict) or not isinstance(answer.get("reply"), str):
             raise ValueError("The assistant returned an invalid event draft.")
     except RuntimeError as error:
         return jsonify({"success": False, "message": str(error)}), 503
     except (json.JSONDecodeError, ValueError):
         app.logger.warning("Gemini assistant returned an invalid event draft for user %s", user_id)
         return jsonify({"success": False, "message": "The assistant returned an invalid event draft. Please retry or add more details."}), 502
+
+    merged_draft = dict(known)
+    res_draft = answer.get("draft_state")
+    if isinstance(res_draft, dict):
+        for k, v in res_draft.items():
+            if v not in (None, ""):
+                merged_draft[k] = v
+
+    actions = answer.get("actions") or []
     action = None
-    if answer["actions"]:
+    if isinstance(actions, list) and len(actions) > 0:
         try:
-            action = normalize_ai_event_create(answer["actions"][0])
+            action = normalize_ai_event_create(actions[0])
+            if action and "fields" in action:
+                merged_draft.update(action["fields"])
         except ValueError as error:
-            app.logger.info("Gemini event draft needs clarification for user %s: %s", user_id, error)
+            app.logger.info("Gemini event draft needs clarification: %s", error)
             return jsonify({
                 "success": True,
-                "reply": f"{answer['reply'][:900]} Please add or correct this detail: {error}",
+                "reply": f"{answer['reply'][:900]} (Detail needed: {error})",
+                "draft_state": merged_draft,
                 "action": None
             })
-    return jsonify({"success": True, "reply": answer["reply"][:1200], "action": action})
+
+    return jsonify({
+        "success": True,
+        "reply": answer["reply"][:1200],
+        "draft_state": merged_draft,
+        "action": action
+    })
 
 @app.route('/api/organizer/assistant/event-draft/apply', methods=['POST'])
 def apply_ai_event_draft():
@@ -3780,6 +4130,7 @@ def apply_ai_event_draft():
                 fields["description"]
             )
         )
+    invalidate_events_cache()
     return jsonify({
         "success": True,
         "message": "Event created. You can add artwork, partners, ticket tiers, and planning details from Manage Event.",
@@ -4993,20 +5344,21 @@ def my_passes():
                WHERE b.user_id = ? ORDER BY b.created_at DESC""",
             (current_user_id(),)
         ).fetchall()
-    bookings = {}
-    for row in rows:
-        booking = bookings.setdefault(row["booking_id"], {
-            "booking_id": row["booking_id"], "quantity": row["quantity"], "status": row["status"],
-            "payment_status": row["payment_status"], "title": row["title"], "event_date": row["event_date"],
-            "event_time": row["event_time"], "venue": row["venue"],
-            "admitted_count": row["admitted_count"], "tier_name": row["tier_name"],
-            "is_cancelled": bool(row["cancelled_at"])
-        })
-        if (row["has_ticket"] and not row["cancelled_at"]
-                and row["status"] == "CONFIRMED"
-                and row["payment_status"] in ("NOT_REQUIRED", "COMPLETED")):
-            booking["qr_url"] = f"/api/bookings/{row['booking_id']}/qr"
-    with get_db() as conn:
+
+        bookings = {}
+        for row in rows:
+            booking = bookings.setdefault(row["booking_id"], {
+                "booking_id": row["booking_id"], "quantity": row["quantity"], "status": row["status"],
+                "payment_status": row["payment_status"], "title": row["title"], "event_date": row["event_date"],
+                "event_time": row["event_time"], "venue": row["venue"],
+                "admitted_count": row["admitted_count"], "tier_name": row["tier_name"],
+                "is_cancelled": bool(row["cancelled_at"])
+            })
+            if (row["has_ticket"] and not row["cancelled_at"]
+                    and row["status"] == "CONFIRMED"
+                    and row["payment_status"] in ("NOT_REQUIRED", "COMPLETED")):
+                booking["qr_url"] = f"/api/bookings/{row['booking_id']}/qr"
+
         movie_rows = [
             dict(row) for row in conn.execute(
                 """SELECT r.id AS reservation_id, r.showtime_id, r.total_amount, r.status,

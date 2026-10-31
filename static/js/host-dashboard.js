@@ -98,6 +98,8 @@ function renderNewEventAssistant() {
     create.type = 'button';
     create.disabled = true;
     let proposedAction = null;
+    let hostDraftHistory = [];
+    let hostDraftState = {};
 
     const message = (text, role) => {
         messages.appendChild(node('p', `host-ai-message ${role}`, text));
@@ -121,10 +123,19 @@ function renderNewEventAssistant() {
             const result = await apiRequest('/api/organizer/assistant/event-draft', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({prompt})
+                body: JSON.stringify({
+                    prompt,
+                    history: hostDraftHistory,
+                    draft_state: hostDraftState
+                })
             });
             messages.lastChild.remove();
             message(result.reply, 'assistant');
+            hostDraftHistory.push({role: 'user', text: prompt});
+            hostDraftHistory.push({role: 'assistant', text: result.reply});
+            if (result.draft_state) {
+                hostDraftState = Object.assign(hostDraftState, result.draft_state);
+            }
             if (result.action) {
                 proposedAction = result.action;
                 const fields = result.action.fields;

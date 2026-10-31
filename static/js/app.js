@@ -895,6 +895,153 @@ function togglePriceInput(isPaidVal) {
     document.getElementById('priceGroup').classList.toggle('hidden', isPaidVal !== 'true');
 }
 
+/* AI Event Creator within Modal */
+let aiModalHistory = [];
+let aiModalDraftState = {};
+
+function autofillModalEventForm(draft) {
+    if (!draft || typeof draft !== 'object') return;
+
+    const highlightAndSet = (id, val) => {
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+            const el = document.getElementById(id);
+            if (el) {
+                el.value = val;
+                el.classList.add('ai-highlight-field');
+                setTimeout(() => el.classList.remove('ai-highlight-field'), 1600);
+            }
+        }
+    };
+
+    if (draft.title) highlightAndSet('evTitle', draft.title);
+    if (draft.category) highlightAndSet('evCategory', draft.category);
+    if (draft.event_date) highlightAndSet('evDate', draft.event_date);
+    if (draft.event_time) highlightAndSet('evTime', draft.event_time);
+    if (draft.venue) highlightAndSet('evVenue', draft.venue);
+    if (draft.city) highlightAndSet('evCity', draft.city);
+    if (draft.description) highlightAndSet('evDescription', draft.description);
+    if (draft.visibility) highlightAndSet('evVisibility', draft.visibility);
+    if (draft.ticket_limit) highlightAndSet('evCapacity', draft.ticket_limit);
+
+    if (draft.is_paid || (draft.ticket_price && Number(draft.ticket_price) > 0)) {
+        const isPaidEl = document.getElementById('evIsPaid');
+        if (isPaidEl) {
+            isPaidEl.value = 'true';
+            togglePriceInput('true');
+        }
+        if (draft.ticket_price) {
+            highlightAndSet('evPrice', draft.ticket_price);
+        }
+    } else if (draft.is_paid === false) {
+        const isPaidEl = document.getElementById('evIsPaid');
+        if (isPaidEl) {
+            isPaidEl.value = 'false';
+            togglePriceInput('false');
+        }
+    }
+}
+
+async function handleAiModalDraftSubmit(e) {
+    if (e) e.preventDefault();
+    const input = document.getElementById('aiModalInput');
+    const submitBtn = document.getElementById('aiModalSubmitBtn');
+    const drawer = document.getElementById('aiModalChatDrawer');
+    const messages = document.getElementById('aiModalMessages');
+    const banner = document.getElementById('aiAutofillBanner');
+
+    const prompt = (input ? input.value : '').trim();
+    if (!prompt) return;
+
+    drawer.classList.remove('hidden');
+
+    // Append user message
+    const userMsg = document.createElement('div');
+    userMsg.className = 'ai-msg-bubble user';
+    userMsg.innerHTML = `<strong>You:</strong> <span>${prompt.replace(/</g, '&lt;')}</span>`;
+    messages.appendChild(userMsg);
+    messages.scrollTop = messages.scrollHeight;
+
+    input.value = '';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        const spinner = submitBtn.querySelector('.btn-spinner');
+        if (spinner) spinner.classList.remove('hidden');
+    }
+
+    // Pending indicator
+    const pendingMsg = document.createElement('div');
+    pendingMsg.className = 'ai-msg-bubble ai pending';
+    pendingMsg.innerHTML = `<strong>Gatherly AI:</strong> <span>Drafting your event details…</span>`;
+    messages.appendChild(pendingMsg);
+    messages.scrollTop = messages.scrollHeight;
+
+    try {
+        const res = await fetch('/api/organizer/assistant/event-draft', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                prompt: prompt,
+                history: aiModalHistory,
+                draft_state: aiModalDraftState
+            })
+        });
+        const data = await res.json();
+        pendingMsg.remove();
+
+        if (!data.success) {
+            const errMsg = document.createElement('div');
+            errMsg.className = 'ai-msg-bubble ai error';
+            errMsg.innerHTML = `<strong>Gatherly AI:</strong> <span>${data.message || 'Could not draft event. Please retry.'}</span>`;
+            messages.appendChild(errMsg);
+            return;
+        }
+
+        // Add to history and draft state
+        aiModalHistory.push({role: 'user', text: prompt});
+        aiModalHistory.push({role: 'assistant', text: data.reply});
+        if (data.draft_state) {
+            aiModalDraftState = Object.assign(aiModalDraftState, data.draft_state);
+        }
+
+        // Append assistant response
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'ai-msg-bubble ai';
+        aiMsg.innerHTML = `<strong>Gatherly AI:</strong> <span>${(data.reply || '').replace(/</g, '&lt;')}</span>`;
+        messages.appendChild(aiMsg);
+        messages.scrollTop = messages.scrollHeight;
+
+        // Autofill form
+        autofillModalEventForm(aiModalDraftState);
+
+        // If event creation action is ready
+        if (data.action && data.action.fields) {
+            banner.classList.remove('hidden');
+            banner.innerHTML = `
+                <div class="banner-inner">
+                    <span class="banner-icon">✓</span>
+                    <div>
+                        <strong>All core details populated!</strong>
+                        <p>Review the form below, upload your cover artwork and click <em>Launch Event</em>.</p>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (err) {
+        if (pendingMsg && pendingMsg.parentNode) pendingMsg.remove();
+        const errMsg = document.createElement('div');
+        errMsg.className = 'ai-msg-bubble ai error';
+        errMsg.innerHTML = `<strong>Gatherly AI:</strong> <span>Connection error. Please try again.</span>`;
+        messages.appendChild(errMsg);
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            const spinner = submitBtn.querySelector('.btn-spinner');
+            if (spinner) spinner.classList.add('hidden');
+        }
+        if (input) input.focus();
+    }
+}
+
 async function handleCreateEvent(event) {
     event.preventDefault();
     const formData = new FormData();

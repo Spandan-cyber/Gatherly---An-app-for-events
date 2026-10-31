@@ -167,6 +167,33 @@
             <button class="close-modal-btn" onclick="closeCreateEventModal()">✕</button>
             <h2 class="modal-title">CREATE EVENT.</h2>
 
+            <!-- AI Event Creator Assistant -->
+            <div class="ai-event-creator-card" id="aiEventCreatorCard">
+                <div class="ai-creator-head">
+                    <div class="ai-creator-title">
+                        <span class="ai-sparkle-pill">✨ AI ASSISTANT</span>
+                        <strong>Draft with Natural Language</strong>
+                    </div>
+                    <span class="ai-creator-subtitle">Describe your event — the AI remembers your details and autofills the form!</span>
+                </div>
+
+                <div class="ai-creator-thread hidden" id="aiModalChatDrawer">
+                    <div class="ai-thread-list" id="aiModalMessages"></div>
+                </div>
+
+                <form class="ai-creator-bar" id="aiModalForm" onsubmit="handleAiModalDraftSubmit(event)">
+                    <div class="ai-input-wrapper">
+                        <svg class="ai-wand-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path></svg>
+                        <input type="text" id="aiModalInput" class="ai-prompt-input" placeholder="e.g. 'Create an event named Sunset Waves at Blue Frog, Mumbai on Dec 31 at 8 PM for ₹500'..." autocomplete="off">
+                        <button type="submit" class="ai-submit-btn" id="aiModalSubmitBtn">
+                            <span class="btn-text">Draft with AI</span>
+                            <span class="btn-spinner hidden">✦</span>
+                        </button>
+                    </div>
+                </form>
+                <div class="ai-autofill-banner hidden" id="aiAutofillBanner"></div>
+            </div>
+
             <form onsubmit="handleCreateEvent(event)">
                 <div class="form-row">
                     <div class="input-group">

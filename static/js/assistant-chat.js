@@ -114,6 +114,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             appendMessage(formatDatesInReply(result.reply), 'assistant');
 
+            if (/(\+?\s*Host Event|\/host\/dashboard|Host Dashboard|create an event|create event)/i.test(result.reply) ||
+                /^(how to |can i |want to )?(create|host|organize|publish) (an? )?event/i.test(prompt)) {
+                appendHostQuickAction();
+            }
+
             // Render event cards and booking buttons returned by Flask.
             if (Array.isArray(result.events)) {
                 appendEventCards(result.events);
@@ -250,6 +255,21 @@ document.addEventListener('DOMContentLoaded', () => {
             messages.appendChild(card);
         });
 
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function appendHostQuickAction() {
+        const wrap = document.createElement('div');
+        wrap.className = 'assistant-quick-actions';
+        wrap.innerHTML = `
+            <button type="button" class="assistant-quick-btn host-btn" onclick="if(window.handleHostEventNav){window.handleHostEventNav();}else{window.location.href='/?create=1';}">
+                ✨ + Host Event Now
+            </button>
+            <a href="/host/dashboard" class="assistant-quick-btn dashboard-btn">
+                🎪 Open Host Dashboard
+            </a>
+        `;
+        messages.appendChild(wrap);
         messages.scrollTop = messages.scrollHeight;
     }
 });
