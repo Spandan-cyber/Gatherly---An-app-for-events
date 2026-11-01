@@ -381,6 +381,38 @@ def send_via_emailjs(receiver_email, subject, body_text, template_params=None, e
     if template_params:
         params.update(template_params)
 
+    # Auto-assign badge and button text for the 2-template configuration
+    if not params.get("badge_text"):
+        badge_map = {
+            "otp": "SECURITY VERIFICATION",
+            "movie": "CINEMA RESERVATION",
+            "ticket": "BOOKING CONFIRMED",
+            "pass": "PASS CONFIRMED",
+            "invitation": "YOU'RE INVITED",
+            "update": "EVENT ANNOUNCEMENT",
+            "test": "SYSTEM STATUS"
+        }
+        params["badge_text"] = badge_map.get(email_type, "GATHERLY UPDATE")
+
+    if not params.get("action_btn_text"):
+        btn_map = {
+            "movie": "VIEW MOVIE TICKETS",
+            "ticket": "VIEW MY PASSES",
+            "pass": "VIEW MY PASSES",
+            "invitation": "OPEN INVITATION & RSVP",
+            "update": "OPEN GATHERLY",
+            "test": "VISIT GATHERLY"
+        }
+        params["action_btn_text"] = btn_map.get(email_type, "OPEN GATHERLY")
+
+    if not params.get("action_url"):
+        if email_type == "movie":
+            params["action_url"] = f"{app_base_url}/movies/tickets"
+        elif email_type in ("ticket", "pass"):
+            params["action_url"] = f"{app_base_url}/?passes=1"
+        else:
+            params["action_url"] = app_base_url
+
     payload = {
         "service_id": service_id,
         "template_id": template_id,
