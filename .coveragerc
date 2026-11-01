@@ -1,0 +1,12 @@
+[run]
+source = .
+omit =
+    tests/*
+    venv/*
+    .venv/*
+    uploads/*
+    static/*
+
+[report]
+show_missing = True
+skip_covered = False

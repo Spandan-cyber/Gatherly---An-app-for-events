@@ -231,11 +231,37 @@ Recommended precautions:
 
 ---
 
+## 🧪 Testing
+
+Gatherly includes a comprehensive automated test suite covering unit tests, integration tests, accessibility audits, and security boundaries.
+
+### Running the Test Suite:
+
+```bash
+python run_tests.py
+```
+
+Or using `pytest`:
+
+```bash
+pytest
+```
+
+The test suite covers:
+- **Accessibility & WCAG Compliance** (`tests/test_accessibility.py`): Landmark roles, skip-link, `<label for>` associations, `:focus-visible`, and ARIA modals.
+- **AI Assistant & Event Drafts** (`tests/test_ai_assistant.py`): Autonomous date/time scheduling, format normalization, and payload handling.
+- **Authentication & Sessions** (`tests/test_auth.py`): Validation, password complexity, login verification, and session management.
+- **Events & Ticketing** (`tests/test_events.py`, `tests/test_booking.py`): Public event listings, filtering, booking workflows, and authorization checks.
+- **Cinema Booking** (`tests/test_cinema.py`): Showtimes, seat reservations, and manager access.
+- **Security & RBAC** (`tests/test_security.py`): HTTP security headers (`nosniff`, `DENY`), OTP verification, super-admin guards, and gate scanner security.
+- **Database Compatibility Layer** (`tests/test_database.py`): Dual SQLite & PostgreSQL/Supabase dialect query translation and row mapping.
+- **Helper Utilities** (`tests/test_helpers.py`): IST timezone conversion, datetime parsing, OTP generator, and QR image generation.
+
+---
+
 ## 🗺️ Future Improvements
 
 Potential improvements include:
-
-- Automated testing and continuous integration.
 - Enhanced booking and payment workflows.
 - Improved event discovery and filtering.
 - Better organizer analytics.
