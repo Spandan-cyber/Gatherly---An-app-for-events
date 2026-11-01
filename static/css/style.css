@@ -4395,6 +4395,15 @@ body {
     right: 0;
 
     width: 320px;
+    max-height: min(560px, calc(100vh - 85px));
+    max-height: min(560px, calc(100dvh - 85px));
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+
     padding: 10px;
     box-sizing: border-box;
 
@@ -4408,6 +4417,22 @@ body {
     box-shadow: var(--nav-shadow);
     animation: navDropIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 1200;
+}
+
+/* Custom sleek scrollbar for nav dropdown */
+.nav-account-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+.nav-account-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 8px 0;
+}
+.nav-account-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+}
+.nav-account-dropdown::-webkit-scrollbar-thumb:hover {
+    background: var(--nav-accent);
 }
 
 @keyframes navDropIn {
@@ -4649,6 +4674,13 @@ body {
 
 .nav-mobile-content.is-open {
     display: block;
+    max-height: calc(100vh - 80px);
+    max-height: calc(100dvh - 80px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
     animation: navMobileOpen 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -4855,6 +4887,13 @@ html[data-theme="light"] .dropdown-user-avatar {
         left: 12px;
         width: auto;
         max-width: 360px;
+        max-height: calc(100vh - 80px);
+        max-height: calc(100dvh - 80px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
         margin: 0 auto;
     }
 }

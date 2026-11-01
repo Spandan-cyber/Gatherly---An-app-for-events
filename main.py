@@ -336,155 +336,84 @@ def build_gatherly_email_html(subject, body_text, has_qr=False):
 </body>
 </html>"""
 
-def send_via_brevo(api_key, receiver_email, subject, body_text, html_content=None, qr_img_bytes=None):
-    sender_email = (
-        os.getenv("BREVO_SENDER_EMAIL")
-        or os.getenv("MAIL_DEFAULT_SENDER")
-        or os.getenv("MAIL_USERNAME")
-        or os.getenv("GMAIL_USER")
-        or "spandandasom40@gmail.com"
-    ).strip()
-    sender_name = os.getenv("BREVO_SENDER_NAME") or "Gatherly"
+def send_via_emailjs(receiver_email, subject, body_text, template_params=None, email_type="general"):
+    service_id = (os.getenv("EMAILJS_SERVICE_ID") or "").strip()
+    public_key = (os.getenv("EMAILJS_PUBLIC_KEY") or os.getenv("EMAILJS_USER_ID") or "").strip()
+    private_key = (os.getenv("EMAILJS_PRIVATE_KEY") or os.getenv("EMAILJS_ACCESS_TOKEN") or "").strip()
+
+    if not service_id or not public_key:
+        return False
+
+    # Choose template ID: specific type first, then general default
+    template_id = None
+    if email_type == "otp":
+        template_id = (os.getenv("EMAILJS_OTP_TEMPLATE_ID") or "").strip()
+    elif email_type in ("ticket", "pass", "movie"):
+        template_id = (os.getenv("EMAILJS_TICKET_TEMPLATE_ID") or "").strip()
+    elif email_type == "invitation":
+        template_id = (os.getenv("EMAILJS_INVITE_TEMPLATE_ID") or "").strip()
+    elif email_type == "update":
+        template_id = (os.getenv("EMAILJS_UPDATE_TEMPLATE_ID") or "").strip()
+
+    if not template_id:
+        template_id = (os.getenv("EMAILJS_TEMPLATE_ID") or "").strip()
+
+    if not template_id:
+        app.logger.warning("EmailJS is configured with Service ID and Public Key, but no Template ID is set.")
+        return False
+
+    app_base_url = (os.getenv("APP_BASE_URL") or "https://gatherly-keup.onrender.com").rstrip("/")
+    recipient_name = ""
+    if "@" in receiver_email:
+        raw_prefix = receiver_email.split("@")[0].replace(".", " ").replace("_", " ")
+        recipient_name = raw_prefix.title()
+
+    params = {
+        "to_email": receiver_email,
+        "email": receiver_email,
+        "to_name": recipient_name or "Gatherly Member",
+        "subject": subject,
+        "message": body_text,
+        "body": body_text,
+        "site_url": app_base_url,
+        "year": str(datetime.now().year)
+    }
+    if template_params:
+        params.update(template_params)
 
     payload = {
-        "sender": {"name": sender_name, "email": sender_email},
-        "to": [{"email": receiver_email}],
-        "subject": subject,
-        "htmlContent": html_content or f"<pre style='font-family:sans-serif;'>{body_text}</pre>",
-        "textContent": body_text
+        "service_id": service_id,
+        "template_id": template_id,
+        "user_id": public_key,
+        "template_params": params
     }
-    if qr_img_bytes:
-        payload["attachment"] = [{
-            "name": "ticket_qr.png",
-            "content": base64.b64encode(qr_img_bytes).decode("ascii")
-        }]
+    if private_key:
+        payload["accessToken"] = private_key
 
     try:
         req = Request(
-            "https://api.brevo.com/v3/smtp/email",
+            "https://api.emailjs.com/api/v1.0/email/send",
             data=json.dumps(payload).encode("utf-8"),
             headers={
-                "api-key": api_key,
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "Gatherly/2.0"
-            },
-            method="POST"
-        )
-        with urlopen(req, timeout=12) as resp:
-            app.logger.info("Email delivered via Brevo HTTPS API (Port 443) to %s", receiver_email)
-            return resp.status in (200, 201, 202)
-    except HTTPError as e:
-        err_msg = ""
-        try:
-            err_msg = e.read().decode("utf-8")
-        except Exception:
-            pass
-        app.logger.warning("Brevo HTTPS API returned status %s: %s", e.code, err_msg)
-        return False
-    except Exception as e:
-        app.logger.warning("Brevo HTTPS API delivery error: %s", e)
-        return False
-
-def send_via_sendgrid(api_key, receiver_email, subject, body_text, html_content=None, qr_img_bytes=None):
-    sender_email = (
-        os.getenv("SENDGRID_SENDER_EMAIL")
-        or os.getenv("MAIL_DEFAULT_SENDER")
-        or os.getenv("MAIL_USERNAME")
-        or os.getenv("GMAIL_USER")
-        or "spandandasom40@gmail.com"
-    ).strip()
-    sender_name = os.getenv("SENDGRID_SENDER_NAME") or "Gatherly"
-
-    payload = {
-        "personalizations": [{"to": [{"email": receiver_email}]}],
-        "from": {"email": sender_email, "name": sender_name},
-        "subject": subject,
-        "content": [
-            {"type": "text/plain", "value": body_text},
-            {"type": "text/html", "value": html_content or f"<pre>{body_text}</pre>"}
-        ]
-    }
-    if qr_img_bytes:
-        payload["attachments"] = [{
-            "content": base64.b64encode(qr_img_bytes).decode("ascii"),
-            "filename": "ticket_qr.png",
-            "type": "image/png",
-            "disposition": "inline",
-            "content_id": "ticket_qr"
-        }]
-
-    try:
-        req = Request(
-            "https://api.sendgrid.com/v3/mail/send",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "User-Agent": "Gatherly/2.0"
             },
             method="POST"
         )
         with urlopen(req, timeout=12) as resp:
-            app.logger.info("Email delivered via SendGrid HTTPS API (Port 443) to %s", receiver_email)
-            return resp.status in (200, 201, 202)
-    except HTTPError as e:
-        err_msg = ""
-        try:
-            err_msg = e.read().decode("utf-8")
-        except Exception:
-            pass
-        app.logger.warning("SendGrid HTTPS API returned status %s: %s", e.code, err_msg)
-        return False
-    except Exception as e:
-        app.logger.warning("SendGrid HTTPS API delivery error: %s", e)
-        return False
-
-def send_via_resend(api_key, receiver_email, subject, body_text, html_content=None, qr_img_bytes=None):
-    from_email = os.getenv("RESEND_FROM") or "Gatherly <onboarding@resend.dev>"
-    payload = {
-        "from": from_email,
-        "to": [receiver_email],
-        "subject": subject,
-        "text": body_text
-    }
-    if html_content:
-        payload["html"] = html_content
-    if qr_img_bytes:
-        payload["attachments"] = [{
-            "filename": "ticket_qr.png",
-            "content": base64.b64encode(qr_img_bytes).decode("ascii")
-        }]
-    try:
-        req = Request(
-            "https://api.resend.com/emails",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "Gatherly/2.0"
-            },
-            method="POST"
-        )
-        with urlopen(req, timeout=10) as resp:
-            app.logger.info("Email delivered via Resend HTTPS API (Port 443) to %s", receiver_email)
+            resp_text = resp.read().decode("utf-8", errors="ignore")
+            app.logger.info("Email delivered via EmailJS (Port 443) to %s: %s", receiver_email, resp_text.strip() or "OK")
             return resp.status in (200, 201)
     except HTTPError as e:
         err_msg = ""
         try:
-            err_msg = e.read().decode("utf-8")
+            err_msg = e.read().decode("utf-8", errors="ignore")
         except Exception:
             pass
-        if e.code == 403 and "only send testing emails to your own email address" in err_msg:
-            app.logger.warning(
-                "Resend HTTPS API 403: Domain not verified. Resend test mode only delivers to your registered account owner email. "
-                "To deliver to ANY email on Render Free Tier without domain verification, add BREVO_API_KEY to Render Environment Variables."
-            )
-        else:
-            app.logger.warning("Resend HTTPS API returned status %s: %s", e.code, err_msg)
+        app.logger.warning("EmailJS HTTPS API returned status %s: %s", e.code, err_msg)
         return False
     except Exception as e:
-        app.logger.warning("Resend HTTPS API delivery error: %s", e)
+        app.logger.warning("EmailJS HTTPS API delivery error: %s", e)
         return False
 
 def send_email_with_qr(
@@ -492,36 +421,27 @@ def send_email_with_qr(
     subject,
     body_text,
     qr_img_bytes=None,
-    required=False
+    required=False,
+    template_params=None,
+    email_type="general"
 ):
     html_content = build_gatherly_email_html(subject, body_text, has_qr=bool(qr_img_bytes))
 
-    # 1. Try Brevo HTTPS API first (ideal for Render free tier: sends to ANY recipient without domain verification)
-    brevo_key = (os.getenv("BREVO_API_KEY") or "").strip()
-    if brevo_key:
-        if send_via_brevo(brevo_key, receiver_email, subject, body_text, html_content, qr_img_bytes):
+    # 1. Try EmailJS REST API (Port 443 - works on Render Free Tier!)
+    service_id = (os.getenv("EMAILJS_SERVICE_ID") or "").strip()
+    public_key = (os.getenv("EMAILJS_PUBLIC_KEY") or os.getenv("EMAILJS_USER_ID") or "").strip()
+    if service_id and public_key:
+        if send_via_emailjs(receiver_email, subject, body_text, template_params=template_params, email_type=email_type):
             return True
 
-    # 2. Try Resend HTTPS API (works for registered account owner, or any recipient once a custom domain is verified)
-    resend_key = (os.getenv("RESEND_API_KEY") or "").strip()
-    if resend_key:
-        if send_via_resend(resend_key, receiver_email, subject, body_text, html_content, qr_img_bytes):
-            return True
-
-    # 3. Try SendGrid HTTPS API (works with single sender verification or verified domain)
-    sendgrid_key = (os.getenv("SENDGRID_API_KEY") or "").strip()
-    if sendgrid_key:
-        if send_via_sendgrid(sendgrid_key, receiver_email, subject, body_text, html_content, qr_img_bytes):
-            return True
-
-    # 4. Try SMTP (works locally, VPS, or paid Render)
+    # 2. Try SMTP fallback (works locally, VPS, or paid Render)
     cfg = get_smtp_config()
     sender_email = cfg["user"]
     app_password = cfg["password"]
 
     if not sender_email or not app_password:
         app.logger.error(
-            "Email not sent: Neither HTTPS API (Brevo/Resend/SendGrid) nor SMTP credentials configured."
+            "Email not sent: Neither EmailJS (EMAILJS_SERVICE_ID, EMAILJS_PUBLIC_KEY, EMAILJS_TEMPLATE_ID) nor SMTP credentials configured."
         )
         if required:
             return False
@@ -579,19 +499,23 @@ def send_email_with_qr(
         app.logger.exception("Email delivery failed for %s: %s", receiver_email, e)
         return False
 
-def send_email_async(receiver_email, subject, body_text, qr_img_bytes=None):
+def send_email_async(receiver_email, subject, body_text, qr_img_bytes=None, template_params=None, email_type="general"):
     thread = Thread(
         target=send_email_with_qr,
-        args=(receiver_email, subject, body_text, qr_img_bytes, False),
+        args=(receiver_email, subject, body_text, qr_img_bytes, False, template_params, email_type),
         daemon=True
     )
     thread.start()
     return thread
 
 def send_event_announcement_emails(recipients, event_title, title, message, in_app_available=True):
+    service_id = (os.getenv("EMAILJS_SERVICE_ID") or "").strip()
+    public_key = (os.getenv("EMAILJS_PUBLIC_KEY") or os.getenv("EMAILJS_USER_ID") or "").strip()
+    template_id = (os.getenv("EMAILJS_UPDATE_TEMPLATE_ID") or os.getenv("EMAILJS_TEMPLATE_ID") or "").strip()
+    has_emailjs = bool(service_id and public_key and template_id)
     cfg = get_smtp_config()
-    if recipients and (not cfg["user"] or not cfg["password"]):
-        app.logger.warning("Event email notifications skipped because SMTP credentials are missing")
+    if recipients and not has_emailjs and (not cfg["user"] or not cfg["password"]):
+        app.logger.warning("Event email notifications skipped because neither EmailJS nor SMTP credentials are configured")
         return 0
 
     sent = 0
@@ -605,11 +529,18 @@ def send_event_announcement_emails(recipients, event_title, title, message, in_a
                 "You received this email because you have a confirmed booking for this event."
             )
         )
+        update_params = {
+            "event_title": event_title,
+            "update_title": title,
+            "update_message": message
+        }
         if send_email_with_qr(
             recipient["email"],
             f"Gatherly update: {event_title}",
             email_body,
-            required=False
+            required=False,
+            template_params=update_params,
+            email_type="update"
         ):
             sent += 1
     return sent
@@ -617,39 +548,35 @@ def send_event_announcement_emails(recipients, event_title, title, message, in_a
 @app.route('/api/test-email-status', methods=['GET'])
 def test_email_status():
     cfg = get_smtp_config()
-    has_brevo = bool((os.getenv("BREVO_API_KEY") or "").strip())
-    has_resend = bool((os.getenv("RESEND_API_KEY") or "").strip())
-    has_sendgrid = bool((os.getenv("SENDGRID_API_KEY") or "").strip())
+    service_id = (os.getenv("EMAILJS_SERVICE_ID") or "").strip()
+    public_key = (os.getenv("EMAILJS_PUBLIC_KEY") or os.getenv("EMAILJS_USER_ID") or "").strip()
+    template_id = (os.getenv("EMAILJS_TEMPLATE_ID") or "").strip()
+    has_emailjs = bool(service_id and public_key and template_id)
     has_user = bool(cfg["user"])
     has_pwd = bool(cfg["password"])
     masked_user = (cfg["user"][:3] + "***@" + cfg["user"].split("@")[-1]) if has_user and "@" in cfg["user"] else (cfg["user"] or None)
 
     active_transport = "None"
-    if has_brevo:
-        active_transport = "Brevo HTTPS API (Port 443 - Verified Sender, sends to ANY recipient)"
-    elif has_resend:
-        active_transport = "Resend HTTPS API (Port 443 - Note: Requires custom domain for arbitrary recipients)"
-    elif has_sendgrid:
-        active_transport = "SendGrid HTTPS API (Port 443)"
+    if has_emailjs:
+        active_transport = f"EmailJS REST API (Port 443 - Service: {service_id}, Template: {template_id})"
     elif has_user and has_pwd:
         active_transport = "SMTP (Gmail/Custom - Note: Blocked on Render Free Tier)"
 
     return jsonify({
-        "configured": bool(has_brevo or has_resend or has_sendgrid or (has_user and has_pwd)),
+        "configured": bool(has_emailjs or (has_user and has_pwd)),
         "active_transport": active_transport,
-        "brevo_https_configured": has_brevo,
-        "resend_https_configured": has_resend,
-        "sendgrid_https_configured": has_sendgrid,
+        "emailjs_configured": has_emailjs,
+        "emailjs_service_id": service_id or None,
+        "emailjs_template_id": template_id or None,
+        "emailjs_public_key_set": bool(public_key),
         "smtp_configured": bool(has_user and has_pwd),
         "smtp_user": masked_user,
         "recommendation": (
-            "Ready! Brevo HTTPS API is configured and will deliver OTPs and tickets to ANY recipient email."
-            if has_brevo else
-            "Resend is configured. Note: Resend test mode only delivers to your Resend account email (spandandasom40@gmail.com). To deliver to any user on Render Free Tier without a custom domain, add BREVO_API_KEY to Render Environment Variables."
-            if has_resend else
-            "SendGrid is configured."
-            if has_sendgrid else
-            "SMTP configured. Note: Render Free Tier firewalls block outbound SMTP (ports 587/465). For 100% reliable free email, add BREVO_API_KEY (free, no domain required) to Render Environment Variables."
+            "Ready! EmailJS is configured and will deliver OTPs and passes via your connected email."
+            if has_emailjs else
+            "EmailJS is partially configured. Ensure EMAILJS_SERVICE_ID, EMAILJS_PUBLIC_KEY, and EMAILJS_TEMPLATE_ID are added to Render Environment Variables."
+            if (service_id or public_key or template_id) else
+            "Render Free Tier blocks outbound SMTP (ports 587/465). For 100% reliable free email, add EMAILJS_SERVICE_ID, EMAILJS_PUBLIC_KEY, and EMAILJS_TEMPLATE_ID to Render Environment Variables."
         )
     })
 
@@ -658,7 +585,6 @@ def test_email_send():
     cfg = get_smtp_config()
     default_target = (
         cfg["user"]
-        or os.getenv("BREVO_SENDER_EMAIL")
         or "spandandasom40@gmail.com"
     )
     data = request.get_json(silent=True) or {}
@@ -677,8 +603,10 @@ def test_email_send():
     success = send_email_with_qr(
         target_email,
         "Gatherly Test Email",
-        "Congratulations! Your Gatherly email delivery system is working successfully.",
-        required=True
+        "Congratulations! Your Gatherly email delivery system via EmailJS is working successfully.",
+        required=True,
+        template_params={"event_title": "Gatherly Test", "otp_code": "123456"},
+        email_type="test"
     )
     if success:
         return jsonify({
@@ -687,7 +615,7 @@ def test_email_send():
         })
     return jsonify({
         "success": False,
-        "message": f"Failed to send test email to {target_email}. Check Render logs for the exact provider response."
+        "message": f"Failed to send test email to {target_email}. Check Render logs for the exact EmailJS response."
     }), 500
 
 @app.route('/uploads/<path:filename>')
@@ -985,7 +913,14 @@ def send_auth_otp(email, otp, purpose):
     else:
         subject = "Gatherly - Password Reset Code"
         message = f"Your password reset verification code is: {otp}\n\nThis code expires in 10 minutes."
-    return send_email_with_qr(email, subject, message, required=True)
+
+    otp_params = {
+        "otp_code": otp,
+        "purpose": purpose.replace("_", " ").title(),
+        "expiry_minutes": "10",
+        "action_url": f"{os.getenv('APP_BASE_URL', 'https://gatherly-keup.onrender.com')}/?auth=login"
+    }
+    return send_email_with_qr(email, subject, message, required=True, template_params=otp_params, email_type="otp")
 
 def current_user_id():
     return session.get("user_id")
@@ -1407,7 +1342,22 @@ def send_event_invitation(email, event, token, role):
         f"Venue: {event['venue']}\n\n"
         f"Open your invitation and RSVP: {invite_url}"
     )
-    return send_email_with_qr(email, f"Gatherly invitation: {event['title']}", body, required=True)
+    invite_params = {
+        "event_title": event['title'],
+        "event_date": format_event_date_display(event['event_date']),
+        "event_time": format_event_time_display(event['event_time']),
+        "venue": event['venue'],
+        "invite_link": invite_url,
+        "action_url": invite_url
+    }
+    return send_email_with_qr(
+        email,
+        f"Gatherly invitation: {event['title']}",
+        body,
+        required=True,
+        template_params=invite_params,
+        email_type="invitation"
+    )
 
 def create_booking_ticket(conn, booking):
     ticket_code = secrets.token_urlsafe(32)
@@ -2886,6 +2836,14 @@ def reserve_cinema_seats(showtime_id):
         email = user["email"]
     email_sent = None
     if qr_image:
+        movie_params = {
+            "film_title": movie_title,
+            "event_title": movie_title,
+            "screening_date": str(movie_date),
+            "theatre_name": theatre_name,
+            "screen_name": screen_name,
+            "seats": ', '.join(seat_labels)
+        }
         email_sent = send_email_with_qr(
             email,
             f"Your Gatherly movie ticket: {movie_title}",
@@ -2893,7 +2851,9 @@ def reserve_cinema_seats(showtime_id):
             f"Screening: {movie_date}\nTheatre: {theatre_name} · {screen_name}\n"
             f"Seats: {', '.join(seat_labels)}\nYour attached movie QR ticket is valid for this reservation.",
             qr_image,
-            required=True
+            required=True,
+            template_params=movie_params,
+            email_type="movie"
         )
     return jsonify({
         "success": True,
@@ -3040,6 +3000,15 @@ def confirm_cinema_reservation(reservation_id):
                FROM cinema_showtimes s WHERE s.id = ?""",
             (reservation["showtime_id"],)
         ).fetchone()
+    movie_params = {
+        "to_name": customer['full_name'],
+        "film_title": reservation['film_title'],
+        "event_title": reservation['film_title'],
+        "theatre_name": show_details['theatre_name'],
+        "screen_name": show_details['screen_name'],
+        "seats": ', '.join(seat_labels),
+        "screening_date": str(show_details['starts_at'])
+    }
     email_sent = send_email_with_qr(
         email,
         f"Your Gatherly movie ticket: {reservation['film_title']}",
@@ -3047,7 +3016,9 @@ def confirm_cinema_reservation(reservation_id):
         f"Screening: {show_details['starts_at']}\nTheatre: {show_details['theatre_name']} · {show_details['screen_name']}\n"
         f"Seats: {', '.join(seat_labels)}\nYour attached movie QR ticket is ready for entry.",
         qr_image,
-        required=True
+        required=True,
+        template_params=movie_params,
+        email_type="movie"
     )
     return jsonify({
         "success": True,
@@ -5565,7 +5536,21 @@ def decide_booking(booking_id):
         f"Date: {format_event_date_display(booking['event_date'])} at {format_event_time_display(booking['event_time'])}\n"
         f"Venue: {booking['venue']}\nOne QR pass admits {booking['quantity']} person(s), one scan per person."
     )
-    email_sent = send_email_with_qr(attendee["email"], f"Your pass: {booking['title']}", body, qr_image)
+    pass_params = {
+        "event_title": booking['title'],
+        "quantity": str(booking['quantity']),
+        "event_date": format_event_date_display(booking['event_date']),
+        "event_time": format_event_time_display(booking['event_time']),
+        "venue": booking['venue']
+    }
+    email_sent = send_email_with_qr(
+        attendee["email"],
+        f"Your pass: {booking['title']}",
+        body,
+        qr_image,
+        template_params=pass_params,
+        email_type="ticket"
+    )
     qr_url = f"/api/bookings/{booking_id}/qr"
     return jsonify({
         "success": True,
@@ -5884,10 +5869,18 @@ def accept_waitlist_offer(waitlist_id):
 
     email_sent = None
     if ticket_code and qr_image:
+        pass_params = {
+            "event_title": event_title,
+            "quantity": str(quantity),
+            "ticket_code": ticket_code,
+            "action_url": f"{os.getenv('APP_BASE_URL', 'https://gatherly-keup.onrender.com')}/?passes=1"
+        }
         email_sent = send_email_with_qr(
             session["user_email"], f"Your Gatherly pass: {event_title}",
             f"Your {quantity} pass(es) for '{event_title}' are confirmed. "
-            "One QR pass admits the attendees one at a time.", qr_image
+            "One QR pass admits the attendees one at a time.", qr_image,
+            template_params=pass_params,
+            email_type="ticket"
         )
     return jsonify({
         "success": True, "booking_id": booking["id"], "status": booking["status"],
@@ -6000,8 +5993,19 @@ def book_ticket():
             "This single QR code admits the booking's attendees one at a time; each successful scan admits one person.\n"
             f"Date: {format_event_date_display(event['event_date'])} at {format_event_time_display(event['event_time'])}\nVenue: {event['venue']}"
         )
+        pass_params = {
+            "event_title": event['title'],
+            "quantity": str(quantity),
+            "ticket_code": ticket_code,
+            "event_date": format_event_date_display(event['event_date']),
+            "event_time": format_event_time_display(event['event_time']),
+            "venue": event['venue'],
+            "action_url": f"{os.getenv('APP_BASE_URL', 'https://gatherly-keup.onrender.com')}/?passes=1"
+        }
         email_sent = send_email_with_qr(
-            session['user_email'], f"Your Gatherly pass: {event['title']}", email_body, qr_image
+            session['user_email'], f"Your Gatherly pass: {event['title']}", email_body, qr_image,
+            template_params=pass_params,
+            email_type="ticket"
         )
 
     return jsonify({
