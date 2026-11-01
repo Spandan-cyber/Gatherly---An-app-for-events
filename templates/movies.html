@@ -9,8 +9,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/movies.css') }}">
 </head>
 <body class="movies-page" data-is-signed-in="{{ 'true' if user_id else 'false' }}" data-open-tickets="{{ 'true' if show_tickets else 'false' }}">
+    <a href="#mainContent" class="skip-link">Skip to main content</a>
     {% with active_nav='movies' if not show_tickets else 'movie-tickets' %}{% include '_navbar.html' %}{% endwith %}
-    <main class="movies-main">
+    <main id="mainContent" class="movies-main">
         <section class="movies-hero">
             <span class="section-kicker">THE BIG SCREEN, YOUR WAY</span>
             <h1>Pick your movie.<br><span>Own your seat.</span></h1>

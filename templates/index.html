@@ -7,11 +7,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body data-invitation-token="{{ invitation_token or '' }}" data-is-signed-in="{{ 'true' if user_name else 'false' }}">
+    <a href="#mainContent" class="skip-link">Skip to main content</a>
 
     {% with active_nav='discover', show_location=true, show_home_actions=true %}{% include '_navbar.html' %}{% endwith %}
 
     <!-- Main View -->
-    <main>
+    <main id="mainContent">
         <section class="hero">
             <div class="hero-badge" data-typewriter>YOUR CITY. YOUR PEOPLE. YOUR NEXT STORY.</div>
             <h1 class="hero-title">MAKE IT<br>AN EXPERIENCE<span class="cursor">_</span></h1>
@@ -67,20 +68,20 @@
     </main>
 
     <!-- Auth Floating Modal -->
-    <div id="authModalOverlay" class="modal-overlay hidden">
+    <div id="authModalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="authModalHeading">
         <div class="glass-modal">
-            <button class="close-modal-btn" onclick="closeAuthModal()">✕</button>
+            <button class="close-modal-btn" type="button" aria-label="Close authentication modal" onclick="closeAuthModal()">✕</button>
 
             <!-- Login View -->
             <div id="viewLogin" class="auth-view">
-                <h2 class="modal-title">ACCESS.</h2>
+                <h2 class="modal-title" id="authModalHeading">ACCESS.</h2>
                 <form onsubmit="handleLogin(event)">
                     <div class="input-group">
-                        <label>EMAIL</label>
+                        <label for="loginEmail">EMAIL</label>
                         <input type="email" id="loginEmail" required>
                     </div>
                     <div class="input-group">
-                        <label>PASSWORD</label>
+                        <label for="loginPassword">PASSWORD</label>
                         <input type="password" id="loginPassword" required>
                     </div>
                     <button type="submit" class="btn-submit">LOGIN</button>
@@ -96,15 +97,15 @@
                 <h2 class="modal-title">CREATE.</h2>
                 <form onsubmit="handleSignup(event)">
                     <div class="input-group">
-                        <label>FULL NAME</label>
+                        <label for="signupName">FULL NAME</label>
                         <input type="text" id="signupName" required>
                     </div>
                     <div class="input-group">
-                        <label>EMAIL</label>
+                        <label for="signupEmail">EMAIL</label>
                         <input type="email" id="signupEmail" required>
                     </div>
                     <div class="input-group">
-                        <label>PASSWORD</label>
+                        <label for="signupPassword">PASSWORD</label>
                         <input type="password" id="signupPassword" minlength="8" autocomplete="new-password" required>
                     </div>
                     <button type="submit" class="btn-submit">SIGN UP</button>
@@ -120,7 +121,7 @@
                 <p class="auth-helper">Forgot your password? Verify a one-time email code, then set a new password.</p>
                 <form id="resetRequestForm" onsubmit="handleRequestReset(event)">
                     <div class="input-group">
-                        <label>REGISTERED EMAIL</label>
+                        <label for="resetEmail">REGISTERED EMAIL</label>
                         <input type="email" id="resetEmail" required>
                     </div>
                     <button type="submit" class="btn-submit">SEND CODE</button>
@@ -128,11 +129,11 @@
 
                 <form id="resetConfirmForm" class="hidden" onsubmit="handleConfirmReset(event)">
                     <div class="input-group">
-                        <label>6-DIGIT CODE</label>
+                        <label for="resetOtp">6-DIGIT CODE</label>
                         <input type="text" id="resetOtp" maxlength="6" required>
                     </div>
                     <div class="input-group">
-                        <label>NEW PASSWORD</label>
+                        <label for="resetNewPassword">NEW PASSWORD</label>
                         <input type="password" id="resetNewPassword" minlength="8" autocomplete="new-password" required>
                     </div>
                     <button type="submit" class="btn-submit">UPDATE PASSWORD</button>
@@ -147,7 +148,7 @@
                 <p class="auth-helper">We sent a 6-digit sign-up verification code to <strong id="verifyEmailLabel"></strong>. It expires in 10 minutes.</p>
                 <form onsubmit="handleVerifyOtp(event)">
                     <div class="input-group">
-                        <label>VERIFICATION CODE</label>
+                        <label for="authOtp">VERIFICATION CODE</label>
                         <input type="text" id="authOtp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
                     </div>
                     <button type="submit" class="btn-submit">VERIFY &amp; CONTINUE</button>
@@ -162,10 +163,10 @@
     </div>
 
     <!-- Create Event Floating Modal -->
-    <div id="eventModalOverlay" class="modal-overlay hidden">
+    <div id="eventModalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="createEventModalTitle">
         <div class="glass-modal modal-large">
-            <button class="close-modal-btn" onclick="closeCreateEventModal()">✕</button>
-            <h2 class="modal-title">CREATE EVENT.</h2>
+            <button class="close-modal-btn" type="button" aria-label="Close create event modal" onclick="closeCreateEventModal()">✕</button>
+            <h2 class="modal-title" id="createEventModalTitle">CREATE EVENT.</h2>
 
             <!-- AI Event Creator Assistant -->
             <div class="ai-event-creator-card" id="aiEventCreatorCard">
@@ -178,30 +179,31 @@
                 </div>
 
                 <div class="ai-creator-thread hidden" id="aiModalChatDrawer">
-                    <div class="ai-thread-list" id="aiModalMessages"></div>
+                    <div class="ai-thread-list" id="aiModalMessages" role="log" aria-live="polite"></div>
                 </div>
 
                 <form class="ai-creator-bar" id="aiModalForm" onsubmit="handleAiModalDraftSubmit(event)">
                     <div class="ai-input-wrapper">
-                        <svg class="ai-wand-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path></svg>
+                        <svg class="ai-wand-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path></svg>
+                        <label for="aiModalInput" class="sr-only">Describe event prompt for AI</label>
                         <input type="text" id="aiModalInput" class="ai-prompt-input" placeholder="e.g. 'Create an event named Sunset Waves at Blue Frog, Mumbai on Dec 31 at 8 PM for ₹500'..." autocomplete="off">
-                        <button type="submit" class="ai-submit-btn" id="aiModalSubmitBtn">
+                        <button type="submit" class="ai-submit-btn" id="aiModalSubmitBtn" aria-label="Submit prompt to AI assistant">
                             <span class="btn-text">Draft with AI</span>
-                            <span class="btn-spinner hidden">✦</span>
+                            <span class="btn-spinner hidden" aria-hidden="true">✦</span>
                         </button>
                     </div>
                 </form>
-                <div class="ai-autofill-banner hidden" id="aiAutofillBanner"></div>
+                <div class="ai-autofill-banner hidden" id="aiAutofillBanner" role="status" aria-live="polite"></div>
             </div>
 
             <form onsubmit="handleCreateEvent(event)">
                 <div class="form-row">
                     <div class="input-group">
-                        <label>EVENT TITLE</label>
+                        <label for="evTitle">EVENT TITLE</label>
                         <input type="text" id="evTitle" required>
                     </div>
                     <div class="input-group">
-                        <label>CATEGORY</label>
+                        <label for="evCategory">CATEGORY</label>
                         <select id="evCategory">
                             <option value="Concert">Concert</option>
                             <option value="Comedy">Comedy</option>
@@ -213,38 +215,38 @@
 
                 <div class="form-row">
                     <div class="input-group">
-                        <label>VISIBILITY</label>
+                        <label for="evVisibility">VISIBILITY</label>
                         <select id="evVisibility">
                             <option value="PUBLIC">Public</option>
                             <option value="PRIVATE">Private</option>
                         </select>
                     </div>
                     <div class="input-group">
-                        <label>TYPE</label>
+                        <label for="evIsPaid">TYPE</label>
                         <select id="evIsPaid" onchange="togglePriceInput(this.value)">
                             <option value="false">Free</option>
                             <option value="true">Paid</option>
                         </select>
                     </div>
                     <div class="input-group hidden" id="priceGroup">
-                        <label>PRICE (₹)</label>
+                        <label for="evPrice">PRICE (₹)</label>
                         <input type="number" id="evPrice" min="0" step="0.01" value="0.0">
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="input-group">
-                        <label>DATE</label>
+                        <label for="evDate">DATE</label>
                         <input type="date" id="evDate" required>
                     </div>
                     <div class="input-group">
-                        <label>TIME (IST)</label>
+                        <label for="evTime">TIME (IST)</label>
                         <input type="time" id="evTime" required>
                     </div>
                 </div>
 
                 <div class="input-group">
-                    <label>EVENT CITY</label>
+                    <label for="evCity">EVENT CITY</label>
                     <div class="city-input-row">
                         <input type="text" id="evCity" maxlength="100" placeholder="e.g. Mumbai" required>
                         <button type="button" class="btn-primary btn-logout" onclick="copyDetectedCity()">USE DETECTED CITY</button>
@@ -252,17 +254,17 @@
                 </div>
 
                 <div class="input-group">
-                    <label>ABOUT THIS EXPERIENCE</label>
+                    <label for="evDescription">ABOUT THIS EXPERIENCE</label>
                     <textarea id="evDescription" rows="4" placeholder="Tell guests what makes this event special"></textarea>
                 </div>
 
                 <div class="form-row">
                     <div class="input-group">
-                        <label>TICKET CAPACITY</label>
+                        <label for="evCapacity">TICKET CAPACITY</label>
                         <input type="number" id="evCapacity" min="1" placeholder="Leave empty for unlimited">
                     </div>
                     <div class="input-group">
-                        <label>GALLERY PHOTOS</label>
+                        <label for="evGalleryImages">GALLERY PHOTOS</label>
                         <input type="file" id="evGalleryImages" accept="image/*" multiple>
                     </div>
                 </div>
@@ -274,33 +276,33 @@
                 </div>
                 <div class="form-row">
                     <div class="input-group">
-                        <label>PUBLISH EVENT AT (OPTIONAL)</label>
+                        <label for="evPublishAt">PUBLISH EVENT AT (OPTIONAL)</label>
                         <input type="datetime-local" id="evPublishAt">
                     </div>
                     <div class="input-group">
-                        <label>START TICKET SALES AT (OPTIONAL)</label>
+                        <label for="evSalesStartAt">START TICKET SALES AT (OPTIONAL)</label>
                         <input type="datetime-local" id="evSalesStartAt">
                     </div>
                 </div>
 
                 <div class="input-group">
-                    <label>VENUE LOCATION</label>
+                    <label for="evVenue">VENUE LOCATION</label>
                     <input type="text" id="evVenue" placeholder="Venue or Address" required>
                 </div>
 
                 <div class="form-row">
                     <div class="input-group">
-                        <label>MAIN IMAGE</label>
+                        <label for="evMainImg">MAIN IMAGE</label>
                         <input type="file" id="evMainImg" accept="image/*" required>
                         <small class="upload-guidance">Recommended: 1200 × 800 px or larger, JPG/WEBP, high quality. Keep the main subject centered for card crops.</small>
                     </div>
                     <div class="input-group">
-                        <label>COVER ART</label>
+                        <label for="evCoverImg">COVER ART</label>
                         <input type="file" id="evCoverImg" accept="image/*">
                         <small class="upload-guidance">Recommended: 1920 × 1080 px, JPG/WEBP. Use a wide 16:9 image and keep important text near the center.</small>
                     </div>
                     <div class="input-group">
-                        <label>TEASER VIDEO</label>
+                        <label for="evVideo">TEASER VIDEO</label>
                         <input type="file" id="evVideo" accept="video/*">
                         <small class="upload-guidance">This teaser also plays silently in the event booking-page hero. MP4 (H.264) or WebM at 720p/1080p works best; use a short, compressed montage. Cover art remains as the fallback and poster.</small>
                     </div>
@@ -322,26 +324,26 @@
         </div>
     </div>
 
-    <div id="eventDetailsOverlay" class="modal-overlay hidden">
+    <div id="eventDetailsOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Event Details">
         <div class="glass-modal modal-large event-details-modal">
-            <button class="close-modal-btn" onclick="closeEventDetails()">✕</button>
+            <button class="close-modal-btn" type="button" aria-label="Close event details" onclick="closeEventDetails()">✕</button>
             <div id="eventDetailsContent"></div>
             <div id="eventBookingReview" class="booking-review hidden"></div>
         </div>
     </div>
 
-    <div id="passesOverlay" class="modal-overlay hidden">
+    <div id="passesOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="myPassesTitle">
         <div class="glass-modal modal-large">
-            <button class="close-modal-btn" onclick="document.getElementById('passesOverlay').classList.add('hidden')">✕</button>
-            <h2 class="modal-title">MY PASSES</h2>
+            <button class="close-modal-btn" type="button" aria-label="Close passes modal" onclick="document.getElementById('passesOverlay').classList.add('hidden')">✕</button>
+            <h2 class="modal-title" id="myPassesTitle">MY PASSES</h2>
             <div id="myPassesList" class="dashboard-list"></div>
         </div>
     </div>
 
-    <div id="wishlistOverlay" class="modal-overlay hidden">
+    <div id="wishlistOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="wishlistTitle">
         <div class="glass-modal modal-large">
-            <button class="close-modal-btn" onclick="document.getElementById('wishlistOverlay').classList.add('hidden')">✕</button>
-            <h2 class="modal-title">YOUR WISHLIST</h2>
+            <button class="close-modal-btn" type="button" aria-label="Close wishlist modal" onclick="document.getElementById('wishlistOverlay').classList.add('hidden')">✕</button>
+            <h2 class="modal-title" id="wishlistTitle">YOUR WISHLIST</h2>
             <div id="wishlistEvents" class="dashboard-list"></div>
         </div>
     </div>

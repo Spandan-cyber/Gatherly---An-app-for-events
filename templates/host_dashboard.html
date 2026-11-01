@@ -8,8 +8,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="host-dashboard-page" data-user-name="{{ user_name }}">
+    <a href="#hostMainContent" class="skip-link">Skip to main content</a>
     {% with active_nav='events' %}{% include '_navbar.html' %}{% endwith %}
-    <main class="host-dashboard-main">
+    <main class="host-dashboard-main" id="hostMainContent">
         <section class="host-welcome" id="overview">
             <span class="section-kicker">HOST STUDIO</span>
             <h1>Your events, all in one place.</h1>

@@ -48,9 +48,8 @@ resend_passes.py
 # Database implementation
 
 # Other test files
-test_*.py
-*_test.py
-tests/
+# test_*.py
+# tests/
 
 # Temporary files
 *.tmp

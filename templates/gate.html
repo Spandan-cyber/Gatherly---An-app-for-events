@@ -8,8 +8,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="gate-page" data-gate-authenticated="{{ 'true' if gate else 'false' }}" data-gate-id="{{ gate['id'] if gate else '' }}" data-gate-type="{{ gate_type or 'EVENT' }}">
+    <a href="#mainContent" class="skip-link">Skip to main content</a>
     {% with active_nav='gate', gate_mode=true %}{% include '_navbar.html' %}{% endwith %}
-    <main class="gate-main">
+    <main id="mainContent" class="gate-main">
         <section id="gateLoginPanel" class="gate-login-card{% if gate %} hidden{% endif %}">
             <span class="section-kicker">GATHERLY GATE ACCESS</span>
             <h1>Gatherly gate scanner</h1>

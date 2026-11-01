@@ -899,6 +899,37 @@ function togglePriceInput(isPaidVal) {
 let aiModalHistory = [];
 let aiModalDraftState = {};
 
+function formatTimeForInput(val) {
+    if (!val) return '';
+    val = String(val).trim();
+    if (/^\d{2}:\d{2}$/.test(val)) return val;
+    if (/^\d{1}:\d{2}$/.test(val)) return '0' + val;
+    const match = val.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+    if (match) {
+        let hour = parseInt(match[1], 10);
+        const mins = match[2] || '00';
+        const meridiem = (match[3] || '').toLowerCase();
+        if (meridiem === 'pm' && hour < 12) hour += 12;
+        if (meridiem === 'am' && hour === 12) hour = 0;
+        return `${String(hour).padStart(2, '0')}:${mins}`;
+    }
+    return val;
+}
+
+function formatDateForInput(val) {
+    if (!val) return '';
+    val = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    return val;
+}
+
 function autofillModalEventForm(draft) {
     if (!draft || typeof draft !== 'object') return;
 
@@ -915,8 +946,8 @@ function autofillModalEventForm(draft) {
 
     if (draft.title) highlightAndSet('evTitle', draft.title);
     if (draft.category) highlightAndSet('evCategory', draft.category);
-    if (draft.event_date) highlightAndSet('evDate', draft.event_date);
-    if (draft.event_time) highlightAndSet('evTime', draft.event_time);
+    if (draft.event_date) highlightAndSet('evDate', formatDateForInput(draft.event_date));
+    if (draft.event_time) highlightAndSet('evTime', formatTimeForInput(draft.event_time));
     if (draft.venue) highlightAndSet('evVenue', draft.venue);
     if (draft.city) highlightAndSet('evCity', draft.city);
     if (draft.description) highlightAndSet('evDescription', draft.description);
@@ -951,6 +982,24 @@ async function handleAiModalDraftSubmit(e) {
 
     const prompt = (input ? input.value : '').trim();
     if (!prompt) return;
+
+    // Sync any current inputs on the form into aiModalDraftState if not already defined
+    const currentFormValues = {
+        title: document.getElementById('evTitle')?.value?.trim(),
+        category: document.getElementById('evCategory')?.value?.trim(),
+        event_date: document.getElementById('evDate')?.value?.trim(),
+        event_time: document.getElementById('evTime')?.value?.trim(),
+        venue: document.getElementById('evVenue')?.value?.trim(),
+        city: document.getElementById('evCity')?.value?.trim(),
+        description: document.getElementById('evDescription')?.value?.trim(),
+        visibility: document.getElementById('evVisibility')?.value?.trim(),
+        ticket_limit: document.getElementById('evCapacity')?.value?.trim()
+    };
+    for (const [k, v] of Object.entries(currentFormValues)) {
+        if (v && !aiModalDraftState[k]) {
+            aiModalDraftState[k] = v;
+        }
+    }
 
     drawer.classList.remove('hidden');
 
@@ -1002,6 +1051,9 @@ async function handleAiModalDraftSubmit(e) {
         if (data.draft_state) {
             aiModalDraftState = Object.assign(aiModalDraftState, data.draft_state);
         }
+        if (data.action && data.action.fields) {
+            aiModalDraftState = Object.assign(aiModalDraftState, data.action.fields);
+        }
 
         // Append assistant response
         const aiMsg = document.createElement('div');
@@ -1010,7 +1062,7 @@ async function handleAiModalDraftSubmit(e) {
         messages.appendChild(aiMsg);
         messages.scrollTop = messages.scrollHeight;
 
-        // Autofill form
+        // Autofill form with full merged draft state
         autofillModalEventForm(aiModalDraftState);
 
         // If event creation action is ready

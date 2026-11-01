@@ -122,7 +122,7 @@ function renderNewEventAssistant() {
         try {
             const result = await apiRequest('/api/organizer/assistant/event-draft', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     prompt,
                     history: hostDraftHistory,
@@ -131,12 +131,13 @@ function renderNewEventAssistant() {
             });
             messages.lastChild.remove();
             message(result.reply, 'assistant');
-            hostDraftHistory.push({role: 'user', text: prompt});
-            hostDraftHistory.push({role: 'assistant', text: result.reply});
+            hostDraftHistory.push({ role: 'user', text: prompt });
+            hostDraftHistory.push({ role: 'assistant', text: result.reply });
             if (result.draft_state) {
                 hostDraftState = Object.assign(hostDraftState, result.draft_state);
             }
-            if (result.action) {
+            if (result.action && result.action.fields) {
+                hostDraftState = Object.assign(hostDraftState, result.action.fields);
                 proposedAction = result.action;
                 const fields = result.action.fields;
                 draft.append(
@@ -163,8 +164,8 @@ function renderNewEventAssistant() {
         try {
             const result = await apiRequest('/api/organizer/assistant/event-draft/apply', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({action: proposedAction})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: proposedAction })
             });
             window.location.assign(`/host/dashboard?event=${encodeURIComponent(result.public_id)}`);
         } catch (error) {
@@ -244,7 +245,7 @@ function openHostEvent(eventId) {
     selected.replaceChildren(back, renderHostEvent(event));
     list.classList.add('hidden');
     selected.classList.remove('hidden');
-    selected.scrollIntoView({behavior: 'smooth', block: 'start'});
+    selected.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderHostEvent(event) {
@@ -412,7 +413,7 @@ function renderEventWorkspaceData(event, data, content) {
         });
         status.addEventListener('change', async () => {
             try {
-                await saveWorkspaceItem(event.id, {kind: 'task_status', task_id: task.id, status: status.value}, content);
+                await saveWorkspaceItem(event.id, { kind: 'task_status', task_id: task.id, status: status.value }, content);
             } catch (error) {
                 setHostNotice(error.message, true);
             }
@@ -614,8 +615,8 @@ function renderPlannerAssistant(event, workspace, content) {
         try {
             const result = await apiRequest(`/api/organizer/events/${event.id}/assistant`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({prompt})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
             });
             messages.lastChild.remove();
             appendMessage(result.reply, 'assistant');
@@ -638,8 +639,8 @@ function renderPlannerAssistant(event, workspace, content) {
         try {
             const result = await apiRequest(`/api/organizer/events/${event.id}/assistant/apply`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({actions: selected})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actions: selected })
             });
             appendMessage(result.message, 'assistant');
             await loadHostDashboard();
@@ -773,7 +774,7 @@ async function submitWorkspaceForm(action, eventId, form, kind, content) {
     action.preventDefault();
     const values = Object.fromEntries(new FormData(form).entries());
     try {
-        await saveWorkspaceItem(eventId, {kind, ...values}, content);
+        await saveWorkspaceItem(eventId, { kind, ...values }, content);
     } catch (error) {
         setHostNotice(error.message, true);
     }
@@ -782,7 +783,7 @@ async function submitWorkspaceForm(action, eventId, form, kind, content) {
 async function saveWorkspaceItem(eventId, payload, content) {
     await apiRequest(`/api/organizer/events/${eventId}/workspace`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
     const event = hostEvents.find(item => Number(item.id) === Number(eventId));
@@ -832,7 +833,7 @@ function renderAnnouncementTool(event) {
         try {
             const result = await apiRequest(`/api/organizer/events/${event.id}/announcements`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title: title.value,
                     message: message.value,
@@ -854,7 +855,7 @@ function renderAnnouncementTool(event) {
 async function cancelManagedEvent(eventId) {
     if (!window.confirm('Cancel this event? It will disappear from listings, ticket entry will stop, and attendees will receive a private Gatherly update and email notification. Event and ticket history will be retained.')) return;
     try {
-        const result = await apiRequest(`/api/organizer/events/${eventId}/cancel`, {method: 'POST'});
+        const result = await apiRequest(`/api/organizer/events/${eventId}/cancel`, { method: 'POST' });
         setHostNotice(result.message);
         await loadHostDashboard();
     } catch (error) {
@@ -927,7 +928,7 @@ function renderEventEditor(event) {
         try {
             const result = await apiRequest(`/api/organizer/events/${event.id}/details`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             setHostNotice(result.message);
@@ -1161,7 +1162,7 @@ function renderTierEditor(event) {
         formData.append('tiers', JSON.stringify(payload));
         save.disabled = true;
         try {
-            await apiRequest(`/api/organizer/events/${event.id}/tiers`, {method: 'POST', body: formData});
+            await apiRequest(`/api/organizer/events/${event.id}/tiers`, { method: 'POST', body: formData });
             setHostNotice('Ticket tiers updated.');
             await loadHostDashboard();
         } catch (error) {
@@ -1205,8 +1206,8 @@ function renderInviteTools(event) {
         try {
             const data = await apiRequest(`/api/events/${event.id}/invitations`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({email: email.value, role: role.value})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email.value, role: role.value })
             });
             setHostNotice(data.invite_url
                 ? `${data.message}. Share this invitation link with the invitee: ${data.invite_url}`
@@ -1264,7 +1265,7 @@ async function revokeInvitation(eventId, invitationId) {
     try {
         const result = await apiRequest(
             `/api/organizer/events/${eventId}/invitations/${invitationId}/revoke`,
-            {method: 'POST'}
+            { method: 'POST' }
         );
         setHostNotice(result.message);
         await loadHostDashboard();
@@ -1330,8 +1331,8 @@ async function decideBooking(bookingId, decision) {
     try {
         const result = await apiRequest(`/api/organizer/bookings/${bookingId}/decision`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({decision})
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision })
         });
         setHostNotice(result.email_sent === false
             ? 'Booking updated, but the confirmation email could not be delivered.'
@@ -1364,10 +1365,10 @@ function renderGateAccounts(event) {
         try {
             const result = await apiRequest(`/api/organizer/events/${event.id}/gate-accounts`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({display_name: name.value})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ display_name: name.value })
             });
-            newlyCreatedGateCredentials = {eventId: event.id, result};
+            newlyCreatedGateCredentials = { eventId: event.id, result };
             event.gate_accounts.unshift(result.account);
             name.value = '';
             renderHostEvents(hostEvents);
@@ -1436,7 +1437,7 @@ async function revokeGateAccount(eventId, accountId) {
     try {
         const result = await apiRequest(
             `/api/organizer/events/${eventId}/gate-accounts/${accountId}/revoke`,
-            {method: 'POST'}
+            { method: 'POST' }
         );
         setHostNotice(result.message);
         await loadHostDashboard();
@@ -1447,7 +1448,7 @@ async function revokeGateAccount(eventId, accountId) {
 
 async function signOutHost() {
     try {
-        await fetch('/api/logout', {method: 'POST'});
+        await fetch('/api/logout', { method: 'POST' });
         window.location.assign('/');
     } catch {
         setHostNotice('Could not sign out. Check your connection and try again.', true);

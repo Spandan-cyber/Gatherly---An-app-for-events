@@ -8,9 +8,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="account-page" data-is-signed-in="true">
+    <a href="#accountMainContent" class="skip-link">Skip to main content</a>
     {% with active_nav='account' %}{% include '_navbar.html' %}{% endwith %}
 
-    <main class="account-main">
+    <main class="account-main" id="accountMainContent">
         <section class="account-hero">
             <span class="section-kicker">YOUR GATHERLY</span>
             <h1>My account</h1>

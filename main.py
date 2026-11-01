@@ -1,4 +1,5 @@
 import os
+import re
 import io
 import json
 import csv
@@ -16,7 +17,10 @@ from threading import Lock, Thread
 from urllib.parse import quote, urlsplit
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-import qrcode
+try:
+    import qrcode
+except ImportError:
+    qrcode = None
 from dotenv import load_dotenv
 from flask import Flask, abort, redirect, render_template, request, jsonify, session, send_file, send_from_directory, url_for
 from werkzeug.exceptions import HTTPException
@@ -200,6 +204,8 @@ def discard_legacy_precise_location():
     session.pop("user_lng", None)
 
 def generate_qr_image(ticket_code):
+    if not qrcode:
+        return b""
     qr = qrcode.QRCode(version=None, box_size=10, border=4)
     qr.add_data(ticket_code)
     qr.make(fit=True)
@@ -3524,8 +3530,10 @@ def gemini_assistant_request(
         "task_create {title,details,due_at,assigned_to}, task_update {task_id,fields}, "
         "budget_create {label,category,estimated_amount,actual_amount}, "
         "budget_update {budget_id,fields}, event_update {fields}. Dates use YYYY-MM-DD; "
-        "times use HH:MM (24-hour). Use IDs from supplied context. Never invent IDs, names, "
-        "dates, prices, or completed work. Use null for unknown assignee; use 0 actual budget "
+        "times use HH:MM (24-hour). For event_update, allowed fields include title, category, event_date, event_time, venue, city, and description. "
+        "You are explicitly allowed to propose event_update to reschedule or update the event date, time, or other details when requested by the planner. "
+        "Use IDs from supplied context. Never invent IDs, names, "
+        "dates, prices, or completed work without prompt instructions. Use null for unknown assignee; use 0 actual budget "
         "when not yet spent. Only propose changes clearly requested by the user. Ask a concise "
         "clarifying question in reply and return no actions when required information is missing. "
         "Do not propose sending messages, cancelling events, issuing refunds, or changing ticket payments."
@@ -4174,6 +4182,62 @@ def public_assistant_chat():
         "reply": answer["reply"][:1500]
     })
 
+def normalize_date_str(value, default_date=None):
+    if not value or not isinstance(value, str):
+        return default_date
+    val = value.strip()
+    formats = [
+        "%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y", "%Y.%m.%d",
+        "%B %d, %Y", "%d %B %Y", "%b %d, %Y", "%d %b %Y",
+        "%B %d %Y", "%d %B", "%b %d", "%d %b"
+    ]
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(val, fmt)
+            if "%Y" not in fmt and "%y" not in fmt:
+                now_y = datetime.now().year
+                dt = dt.replace(year=now_y)
+                if dt.date() < datetime.now().date():
+                    dt = dt.replace(year=now_y + 1)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    if len(val) >= 10 and val[:4].isdigit() and val[4] in "-/" and val[7] in "-/":
+        try:
+            clean_val = val[:10].replace("/", "-")
+            return datetime.strptime(clean_val, "%Y-%m-%d").strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return default_date
+
+def normalize_time_str(value, default_time="19:00"):
+    if not value or not isinstance(value, str):
+        return default_time
+    val = value.strip().upper()
+    formats = [
+        "%H:%M", "%H:%M:%S",
+        "%I:%M %p", "%I:%M%p",
+        "%I %p", "%I%p",
+        "%H"
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(val, fmt).strftime("%H:%M")
+        except ValueError:
+            pass
+    match = re.match(r'^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$', val)
+    if match:
+        h = int(match.group(1))
+        m = int(match.group(2) or 0)
+        p = match.group(3)
+        if p == "PM" and h < 12:
+            h += 12
+        elif p == "AM" and h == 12:
+            h = 0
+        if 0 <= h < 24 and 0 <= m < 60:
+            return f"{h:02d}:{m:02d}"
+    return default_time
+
 def normalize_ai_event_create(action):
     if not isinstance(action, dict) or action.get("type") != "event_create":
         raise ValueError("The assistant did not return a new event draft.")
@@ -4192,31 +4256,45 @@ def normalize_ai_event_create(action):
         default_value = "Other" if key == "category" else ""
         value = fields.get(key, default_value)
         if not isinstance(value, str):
-            raise ValueError(f"Enter a valid event {key}.")
+            value = str(value) if value is not None else default_value
         value = value.strip()
         if key == "category" and not value:
             value = "Other"
-        if (key != "description" and not value) or len(value) > limit:
+        if not value and key == "venue":
+            value = "TBD"
+        if (key not in ("description", "venue") and not value) or len(value) > limit:
             raise ValueError(f"Enter a valid event {key} (maximum {limit} characters).")
         clean[key] = value
-    for key, date_format, label in (
-        ("event_date", "%Y-%m-%d", "date"),
-        ("event_time", "%H:%M", "time")
-    ):
-        value = fields.get(key)
-        if not isinstance(value, str):
-            raise ValueError(f"Enter a valid event {label}.")
-        try:
-            parsed_value = datetime.strptime(value, date_format)
-        except ValueError:
-            raise ValueError(f"Event {label}s must use {date_format}.") from None
-        if parsed_value.strftime(date_format) != value:
-            raise ValueError(f"Event {label}s must use {date_format}.")
-        clean[key] = value
+
+    now = datetime.now()
+    days_to_sat = (5 - now.weekday()) % 7
+    if days_to_sat <= 0:
+        days_to_sat += 7
+    fallback_date = (now + timedelta(days=days_to_sat)).strftime("%Y-%m-%d")
+
+    raw_date = fields.get("event_date")
+    clean["event_date"] = normalize_date_str(raw_date, default_date=fallback_date)
+    raw_time = fields.get("event_time")
+    clean["event_time"] = normalize_time_str(raw_time, default_time="19:00")
+
     visibility = fields.get("visibility", "PUBLIC")
     if visibility not in ("PUBLIC", "PRIVATE"):
-        raise ValueError("Choose public or invite-only visibility.")
+        visibility = "PUBLIC"
     clean["visibility"] = visibility
+
+    if "is_paid" in fields:
+        clean["is_paid"] = bool(fields["is_paid"])
+    if "ticket_price" in fields:
+        try:
+            clean["ticket_price"] = float(fields["ticket_price"])
+        except (TypeError, ValueError):
+            clean["ticket_price"] = 0.0
+    if "ticket_limit" in fields:
+        try:
+            clean["ticket_limit"] = int(fields["ticket_limit"])
+        except (TypeError, ValueError):
+            pass
+
     return {"type": "event_create", "fields": clean}
 
 @app.route('/api/organizer/assistant/event-draft', methods=['POST'])
@@ -4232,6 +4310,15 @@ def propose_ai_event_draft():
         return jsonify({"success": False, "message": "Gemini is not configured. Set GEMINI_API_KEY in the server environment."}), 503
     if not consume_gemini_request(rate_key):
         return jsonify({"success": False, "message": "Assistant limit reached. Try again in an hour."}), 429
+
+    now = datetime.now()
+    today_iso = now.strftime("%Y-%m-%d")
+    current_day = now.strftime("%A")
+    current_time = now.strftime("%H:%M")
+    days_to_sat = (5 - now.weekday()) % 7
+    if days_to_sat <= 0:
+        days_to_sat += 7
+    suggested_date = (now + timedelta(days=days_to_sat)).strftime("%Y-%m-%d")
 
     # Extract conversation history
     raw_history = data.get("history")
@@ -4251,28 +4338,52 @@ def propose_ai_event_draft():
             if val not in (None, ""):
                 known[k] = val
 
+    if "event_date" in known:
+        norm_d = normalize_date_str(known["event_date"])
+        if norm_d:
+            known["event_date"] = norm_d
+    if "event_time" in known:
+        norm_t = normalize_time_str(known["event_time"])
+        if norm_t:
+            known["event_time"] = norm_t
+
     system_instruction = (
-        "You are Gatherly's intelligent event creation assistant. "
-        "Your task is to help the organizer draft and configure their event through conversation. "
-        "CRITICAL MEMORY & RETENTION RULES: "
-        "1. ALWAYS remember and retain EVERY detail the organizer provided across the conversation "
-        "(such as event title, venue, city, date, time, category, visibility, price, capacity). "
-        "2. NEVER re-ask for details already provided in previous conversation turns or present in CURRENT KNOWN DRAFT. "
-        "If the organizer previously stated the event name and venue, NEVER ask for them again! "
-        "3. Required fields to complete an event are: title, event_date (YYYY-MM-DD), event_time (HH:MM, 24-hour), venue, and city. "
-        "4. If category is unspecified, infer a suitable category from Concert, Comedy, Festival, Meetup, or Other. "
-        "5. If visibility is unspecified, default to PUBLIC. "
-        "6. If the user mentions 'paid' or a price (e.g. ₹500 or 500 rupees), set is_paid: true and ticket_price: number. If 'free', set is_paid: false. "
-        "7. If description is missing, generate an engaging 1-2 sentence description. "
-        "8. In your JSON response, ALWAYS return: "
-        "- reply: a concise, friendly message acknowledging what you recorded and asking ONLY for details that are still missing. "
-        "- draft_state: an object containing ALL fields known so far (title, category, event_date, event_time, venue, city, description, visibility, is_paid, ticket_price, ticket_limit). Whenever the user provides or mentions dates (e.g. '31 December 2026' -> '2026-12-31'), times (e.g. '7PM' -> '19:00'), venues, or cities, you MUST convert and include them in draft_state! Retain ALL previously known fields! "
-        "- actions: an array. If title, event_date, event_time, venue, and city are all known or have been mentioned across the conversation, you MUST return one action of type 'event_create' with fields {title, category, event_date, event_time, venue, city, description, visibility}. If any of these 5 required fields is still missing, actions MUST be empty []."
+        "You are Gatherly's intelligent event creation and drafting assistant. "
+        f"CURRENT CONTEXT: Today is {today_iso} ({current_day}). The current time is {current_time} (IST/local). "
+        "Your task is to draft, configure, and refine events through conversation. "
+        "\n--- CORE CAPABILITIES AND RULES ---:\n"
+        "1. AUTONOMOUS DATE & TIME SELECTION: "
+        "You have full permission and responsibility to set, suggest, and update the event date and time autonomously on your own! "
+        "If the organizer has NOT specified a date or time, or asks you to suggest/pick/set one, or leaves it out: "
+        f"Do NOT ask or wait for them. Autonomously choose an upcoming future date (e.g. near upcoming weekend like {suggested_date} or 1-2 weeks from today, in YYYY-MM-DD format) "
+        "and a sensible time (e.g. '19:00' for evening events/concerts/parties, '10:00' for daytime meetups, in HH:MM 24-hour format). "
+        "Set these in `draft_state` and in `actions`, and mention the chosen date and time in your reply so the organizer knows it was set. "
+        "\n2. EXPLICIT MODIFICATIONS & UPDATES: "
+        "The organizer can explicitly update, change, reschedule, replace, or customize ANY field at any time (e.g., event_date, event_time, venue, city, title, category, description, visibility, price, capacity). "
+        "Whenever the user asks to change or update a detail (e.g., 'change date to next Friday', 'make the time 8 PM', 'change venue to ...', 'set ticket price to ₹400', 'rename event to ...'), "
+        "you MUST IMMEDIATELY update and overwrite that field in `draft_state` and in `actions` with the requested new value! Do not retain the old value when a change is requested. "
+        "\n3. FORMATTING: "
+        "- event_date MUST be in ISO format: YYYY-MM-DD. "
+        "- event_time MUST be in 24-hour format: HH:MM (e.g. '19:00', '20:30', '10:00'). Convert 12-hour times (e.g. 7 PM -> 19:00, 8:30 PM -> 20:30). "
+        "\n4. CATEGORY & VISIBILITY: "
+        "- If category is unspecified, infer from Concert, Comedy, Festival, Meetup, Other. "
+        "- If visibility is unspecified, default to PUBLIC. "
+        "\n5. PRICING: "
+        "- If paid or a price is specified, set is_paid: true and ticket_price: number. If free, set is_paid: false and ticket_price: 0. "
+        "\n6. DESCRIPTION: "
+        "- Always generate an engaging 1-2 sentence description if missing, or update it if instructed. "
+        "\n7. VENUE & CITY: "
+        "- If city or venue is specified, use it. If city is known but venue is unspecified, you can propose a popular venue in that city or ask. "
+        "\n8. RESPONSE FORMAT: "
+        "Return valid JSON with: "
+        "- reply: a friendly, concise message acknowledging the details set or updated (mentioning the date and time), and asking only if essential city/venue info is still missing. "
+        "- draft_state: an object containing ALL fields known or autonomously chosen so far (title, category, event_date, event_time, venue, city, description, visibility, is_paid, ticket_price, ticket_limit). "
+        "- actions: an array. Whenever title, event_date, event_time, venue, and city are known (or autonomously set by you), you MUST return one action of type 'event_create' with fields {title, category, event_date, event_time, venue, city, description, visibility}. If city or venue is truly unknown, return []."
     )
 
-    prompt_parts = []
+    prompt_parts = [f"CURRENT REFERENCE: Today is {today_iso} ({current_day}), {current_time}."]
     if known:
-        prompt_parts.append(f"CURRENT KNOWN DRAFT: {json.dumps(known)}")
+        prompt_parts.append(f"CURRENT DRAFT STATE: {json.dumps(known)}")
     prompt_parts.append(f"Organizer message: {prompt}")
     final_prompt = "\n\n".join(prompt_parts)
 
@@ -4351,6 +4462,17 @@ def propose_ai_event_draft():
             if v not in (None, ""):
                 merged_draft[k] = v
 
+    # Ensure event_date and event_time in merged_draft are normalized and set
+    if merged_draft.get("event_date"):
+        merged_draft["event_date"] = normalize_date_str(merged_draft["event_date"], default_date=suggested_date)
+    else:
+        merged_draft["event_date"] = suggested_date
+
+    if merged_draft.get("event_time"):
+        merged_draft["event_time"] = normalize_time_str(merged_draft["event_time"], default_time="19:00")
+    else:
+        merged_draft["event_time"] = "19:00"
+
     actions = answer.get("actions") or []
     action = None
     if isinstance(actions, list) and len(actions) > 0:
@@ -4359,13 +4481,32 @@ def propose_ai_event_draft():
             if action and "fields" in action:
                 merged_draft.update(action["fields"])
         except ValueError as error:
-            app.logger.info("Gemini event draft needs clarification: %s", error)
-            return jsonify({
-                "success": True,
-                "reply": f"{answer['reply'][:900]} (Detail needed: {error})",
-                "draft_state": merged_draft,
-                "action": None
-            })
+            app.logger.info("Gemini event draft normalization note: %s", error)
+
+    # If action was not returned by model but title, venue, and city are known, construct it!
+    if not action and merged_draft.get("title") and merged_draft.get("venue") and merged_draft.get("city"):
+        try:
+            candidate_action = {
+                "type": "event_create",
+                "fields": {
+                    "title": merged_draft.get("title"),
+                    "category": merged_draft.get("category", "Other"),
+                    "event_date": merged_draft.get("event_date", suggested_date),
+                    "event_time": merged_draft.get("event_time", "19:00"),
+                    "venue": merged_draft.get("venue"),
+                    "city": merged_draft.get("city"),
+                    "description": merged_draft.get("description", ""),
+                    "visibility": merged_draft.get("visibility", "PUBLIC"),
+                    "is_paid": merged_draft.get("is_paid", False),
+                    "ticket_price": merged_draft.get("ticket_price", 0.0),
+                    "ticket_limit": merged_draft.get("ticket_limit")
+                }
+            }
+            action = normalize_ai_event_create(candidate_action)
+            if action and "fields" in action:
+                merged_draft.update(action["fields"])
+        except ValueError:
+            pass
 
     return jsonify({
         "success": True,
@@ -4386,17 +4527,22 @@ def apply_ai_event_draft():
         return jsonify({"success": False, "message": str(error)}), 400
 
     fields = action["fields"]
+    is_paid = 1 if fields.get("is_paid") else 0
+    price = float(fields.get("ticket_price") or 0.0) if is_paid else 0.0
+    ticket_limit = int(fields.get("ticket_limit")) if fields.get("ticket_limit") else None
+
     with get_db() as conn:
         public_id = generate_event_public_id(conn)
         cursor = conn.execute(
             """INSERT INTO events
                (public_id, organizer_id, title, category, visibility, is_paid, price,
-                event_date, event_time, venue, city, description)
-               VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)""",
+                event_date, event_time, venue, city, description, ticket_limit)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 public_id, user_id, fields["title"], fields["category"], fields["visibility"],
+                is_paid, price,
                 fields["event_date"], fields["event_time"], fields["venue"], fields["city"],
-                fields["description"]
+                fields["description"], ticket_limit
             )
         )
     invalidate_events_cache()
